@@ -1,0 +1,1089 @@
+
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import type { Goal, GoalMetric, AIAchievementSuggestion, CustomAchievement, Match, GoalType, AchievementCondition, AchievementTier, Achievement } from '../types';
+import { useTheme } from '../contexts/ThemeContext';
+import { useData } from '../contexts/DataContext';
+import Card from '../components/common/Card';
+import { achievementsList } from '../data/achievements';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import { TrophyIcon } from '../components/icons/TrophyIcon';
+import { TargetIcon } from '../components/icons/TargetIcon';
+import { calculateHistoricalRecords, parseLocalDate, evaluateCustomAchievement, getProgressForGoal } from '../utils/analytics';
+import { generateAchievementSuggestions, generateCreativeGoalTitle } from '../services/geminiService';
+import { SparklesIcon } from '../components/icons/SparklesIcon';
+import { Loader } from '../components/Loader';
+import { ChevronIcon } from '../components/icons/ChevronIcon';
+import HistoryAccordion from '../components/HistoryAccordion';
+import { useTutorial } from '../hooks/useTutorial';
+import TutorialModal from '../components/modals/TutorialModal';
+import { TrendingUpIcon } from '../components/icons/TrendingUpIcon';
+import { AwardIcon } from '../components/icons/AwardIcon';
+import { InfoIcon } from '../components/icons/InfoIcon';
+import { ShareIcon } from '../components/icons/ShareIcon';
+import ShareViewModal from '../components/modals/ShareViewModal';
+import ConfirmationModal from '../components/modals/ConfirmationModal';
+
+function debounce<F extends (...args: any[]) => any>(func: F, wait: number): (...args: Parameters<F>) => void {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  return function executedFunction(...args: Parameters<F>) {
+    const later = () => {
+      timeout = null;
+      func(...args);
+    };
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    timeout = setTimeout(later, wait);
+  };
+}
+
+const metricLabels: Record<GoalMetric, string> = {
+  myGoals: 'Goles',
+  myAssists: 'Asistencias',
+  VICTORIA: 'Victorias',
+  winRate: '% de Victorias',
+  gpm: 'Goles por Partido',
+  longestWinStreak: 'Racha de Victorias',
+  longestUndefeatedStreak: 'Racha Invicta',
+  undefeatedRate: '% Invicto',
+};
+const metricIcons: Record<GoalMetric, React.ReactNode> = {
+  myGoals: <span style={{ fontSize: '1.5rem' }}>⚽️</span>,
+  myAssists: <span style={{ fontSize: '1.5rem' }}>👟</span>,
+  VICTORIA: <span style={{ fontSize: '1.5rem' }}>✅</span>,
+  winRate: <span style={{ fontSize: '1.5rem' }}>📈</span>,
+  gpm: <span style={{ fontSize: '1.5rem' }}>🎯</span>,
+  longestWinStreak: <span style={{ fontSize: '1.5rem' }}>🔥</span>,
+  longestUndefeatedStreak: <span style={{ fontSize: '1.5rem' }}>🛡️</span>,
+  undefeatedRate: <span style={{ fontSize: '1.5rem' }}>💪</span>,
+};
+
+const achievementMetricLabels: Record<AchievementCondition['metric'], string> = {
+  winStreak: 'Racha de Victorias',
+  lossStreak: 'Racha de Derrotas (negativo)',
+  undefeatedStreak: 'Racha Invicta',
+  winlessStreak: 'Racha sin Ganar (negativo)',
+  goalStreak: 'Racha marcando goles',
+  assistStreak: 'Racha dando asistencias',
+  goalDrought: 'Sequía de Goles (negativo)',
+  assistDrought: 'Sequía de Asistencias (negativo)',
+  breakWinAfterLossStreak: 'Romper racha de derrotas',
+  breakUndefeatedAfterWinlessStreak: 'Romper racha sin ganar',
+};
+
+
+const formatPeriod = (startDate?: string, endDate?: string, goalType?: GoalType): string => {
+    if (goalType === 'peak') return "Cualquier partido";
+    if (!startDate || !endDate) return "Histórico";
+    
+    const start = parseLocalDate(startDate);
+    const end = parseLocalDate(endDate);
+    
+    const startUTC = new Date(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+    const endUTC = new Date(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+
+    if (startUTC.getUTCDate() === 1 && endUTC.getUTCDate() >= 28 && startUTC.getUTCMonth() === 0 && endUTC.getUTCMonth() === 11 && startUTC.getUTCFullYear() === endUTC.getUTCFullYear()) {
+        return `Temporada ${startUTC.getUTCFullYear()}`;
+    }
+    
+    const startMonth = startUTC.toLocaleString('es-ES', { month: 'short' });
+    const endMonth = endUTC.toLocaleString('es-ES', { month: 'short' });
+
+    if (startUTC.getUTCFullYear() === endUTC.getUTCFullYear()) {
+        if (startUTC.getUTCMonth() === endUTC.getUTCMonth()) {
+            return `${startMonth}. ${startUTC.getUTCFullYear()}`;
+        }
+        return `${startMonth}. - ${endMonth}. ${startUTC.getUTCFullYear()}`;
+    }
+    
+    return `${startMonth}. ${startUTC.getUTCFullYear()} - ${endMonth}. ${startUTC.getUTCFullYear()}`;
+};
+
+
+const GoalCard: React.FC<{ goal: Goal; progress: number; onDelete: () => void; }> = ({ goal, progress, onDelete }) => {
+    const { theme } = useTheme();
+    const progressPercentage = Math.min((progress / goal.target) * 100, 100);
+    const styles = {
+        goalCard: { display: 'flex', flexDirection: 'column' as 'column', gap: '1rem', position: 'relative' as 'relative' },
+        goalHeader: { display: 'flex', alignItems: 'center', gap: '1rem' },
+        goalTitleContainer: { flex: 1 },
+        goalTitle: { margin: 0, fontSize: '1.125rem', color: theme.colors.primaryText, },
+        goalPeriod: { margin: `0.25rem 0 0 0`, fontSize: '0.75rem', color: theme.colors.secondaryText, fontStyle: 'italic' },
+        progressInfo: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' },
+        progressText: { fontSize: '0.875rem', color: theme.colors.secondaryText },
+        progressValue: { fontSize: '1.125rem', fontWeight: 700, color: theme.colors.primaryText },
+        progressBarContainer: { width: '100%', backgroundColor: theme.colors.border, borderRadius: '6px', overflow: 'hidden', height: '8px' },
+        progressBar: { height: '100%', backgroundColor: theme.colors.accent1, transition: 'width 0.5s ease-in-out', borderRadius: '6px' },
+        deleteButton: { position: 'absolute' as 'absolute', top: '0.5rem', right: '0.5rem', background: 'none', border: 'none', color: theme.colors.secondaryText, cursor: 'pointer', fontSize: '1.5rem', lineHeight: 1, padding: '0.25rem' },
+    };
+    return (
+        <Card style={styles.goalCard}>
+            <button onClick={onDelete} style={styles.deleteButton} aria-label="Eliminar meta">&times;</button>
+            <div style={styles.goalHeader}>
+                {metricIcons[goal.metric]}
+                <div style={styles.goalTitleContainer}>
+                    <h4 style={styles.goalTitle}>{goal.title}</h4>
+                    <p style={styles.goalPeriod}>{formatPeriod(goal.startDate, goal.endDate, goal.goalType)}</p>
+                </div>
+            </div>
+            <div>
+                <div style={styles.progressInfo}><span style={styles.progressText}>Progreso</span><span style={styles.progressValue}>{progress.toFixed(['gpm', 'winRate', 'undefeatedRate'].includes(goal.metric) ? 2 : 0)} / {goal.target}</span></div>
+                <div style={styles.progressBarContainer}><div style={{ ...styles.progressBar, width: `${progressPercentage}%` }} /></div>
+            </div>
+        </Card>
+    );
+};
+
+const metricToGoalTypes: Record<string, GoalType[]> = {
+  myGoals: ['accumulate', 'peak'],
+  myAssists: ['accumulate'],
+  VICTORIA: ['accumulate'],
+  winRate: ['percentage'],
+  gpm: ['average'],
+  longestWinStreak: ['streak'],
+  longestUndefeatedStreak: ['streak'],
+  undefeatedRate: ['percentage'],
+};
+
+const goalTypeLabels: Record<GoalType, string> = {
+    accumulate: 'Acumular un total',
+    percentage: 'Alcanzar un %',
+    average: 'Mantener un promedio',
+    streak: 'Alcanzar una racha',
+    peak: 'Lograr en un partido'
+};
+
+const ProgressPage: React.FC = () => {
+  const { theme } = useTheme();
+  const { matches, goals, addGoal, deleteGoal, customAchievements, addCustomAchievement, deleteCustomAchievement, addAIInteraction, addNotification, isShareMode, checkAILimit, aiUsageCount, AI_MONTHLY_LIMIT } = useData();
+  const { isTutorialSeen, markTutorialAsSeen } = useTutorial('progress');
+
+  // State for Goal Builder
+  const [goalMetric, setGoalMetric] = useState<GoalMetric>('myGoals');
+  const [goalType, setGoalType] = useState<GoalType>('accumulate');
+  const [goalTarget, setGoalTarget] = useState<number | string>('');
+  const [goalTitle, setGoalTitle] = useState('');
+  const [isTitleManuallyEdited, setIsTitleManuallyEdited] = useState(false);
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
+  const [periodType, setPeriodType] = useState<'year' | 'range' | 'all'>('year');
+  const [selectedYearForGoal, setSelectedYearForGoal] = useState<string>(new Date().getFullYear().toString());
+  const currentMonthYYYYMM = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    return `${year}-${String(month).padStart(2, '0')}`;
+  }, []);
+  const [startMonth, setStartMonth] = useState(currentMonthYYYYMM);
+  const [endMonth, setEndMonth] = useState(currentMonthYYYYMM);
+  const [isAddGoalHovered, setIsAddGoalHovered] = useState(false);
+
+  // State for Custom Challenge Builder
+  const [customAchTitle, setCustomAchTitle] = useState('');
+  const [customAchDesc, setCustomAchDesc] = useState('');
+  const [customAchIcon, setCustomAchIcon] = useState('🏆');
+  const [customAchMetric, setCustomAchMetric] = useState<AchievementCondition['metric']>('winStreak');
+  const [customAchValue, setCustomAchValue] = useState<number | string>('');
+  const [isAddChallengeHovered, setIsAddChallengeHovered] = useState(false);
+
+  // State for AI Suggestions
+  const [aiAchievementSuggestions, setAiAchievementSuggestions] = useState<AIAchievementSuggestion[]>([]);
+  const [isGeneratingAdvice, setIsGeneratingAdvice] = useState(false);
+  const [adviceError, setAdviceError] = useState<string | null>(null);
+  const [isGenerateAdviceHovered, setIsGenerateAdviceHovered] = useState(false);
+  
+  // General Page State
+  const [activeTab, setActiveTab] = useState<'goals' | 'achievements'>('goals');
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 992);
+  const historicalRecords = useMemo(() => calculateHistoricalRecords(matches), [matches]);
+  const [seenAchievements, setSeenAchievements] = useLocalStorage<Record<string, boolean>>('seenAchievements', {});
+  const [newlyUnlocked, setNewlyUnlocked] = useState<string[]>([]);
+  
+  // Disable tutorial auto-open in share mode
+  const [isTutorialOpen, setIsTutorialOpen] = useState(!isTutorialSeen && !isShareMode);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  
+  const [confirmState, setConfirmState] = useState<{
+      isOpen: boolean;
+      type: 'goal' | 'achievement' | null;
+      id?: string;
+  }>({ isOpen: false, type: null });
+
+  const tutorialSteps = [
+    {
+        title: 'Tu legado deportivo',
+        content: 'No basta con jugar, hay que trascender. Gestiona tus ambiciones y admira las medallas que has colgado en la pared.',
+        icon: <TrendingUpIcon size={48} />,
+    },
+    {
+        title: 'Metas vs. Palmarés',
+        content: 'Las Metas son las promesas que te haces a ti mismo en la temporada. Los Logros son el reconocimiento eterno a tu excelencia.',
+        icon: <AwardIcon size={48} />,
+    },
+    {
+        title: 'Ingeniería de éxito',
+        content: 'Diseña objetivos a medida para mantener la motivación, o deja que la IA ponga a prueba tus límites.',
+        icon: <SparklesIcon size={48} />,
+    }
+  ];
+
+  const availableGoalTypes = metricToGoalTypes[goalMetric] || ['accumulate'];
+
+  const isTargetInputVisible = useMemo(() => {
+    if (goalMetric === 'undefeatedRate') return false;
+    return true;
+  }, [goalMetric]);
+
+  useEffect(() => {
+    if (!availableGoalTypes.includes(goalType)) {
+        setGoalType(availableGoalTypes[0]);
+    }
+  }, [goalMetric, goalType, availableGoalTypes]);
+  
+  const isPeriodSelectionVisible = useMemo(() => {
+    if (goalType === 'peak') return false;
+    return true;
+  }, [goalType]);
+
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth >= 992);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const allAchievementsWithProgress = useMemo(() => {
+    return achievementsList.map(ach => {
+      const currentProgress = ach.progress(matches, historicalRecords);
+      const unlockedTiers = ach.tiers.filter(t => currentProgress >= t.target);
+      const nextTier = ach.tiers.find(t => currentProgress < t.target);
+      return { ...ach, currentProgress, unlockedTiers, nextTier };
+    });
+  }, [matches, historicalRecords]);
+
+  useEffect(() => {
+    const newUnlocks: string[] = [];
+    allAchievementsWithProgress.forEach(ach => {
+      ach.unlockedTiers.forEach((tier, index) => {
+        const key = `${ach.id}-${index}`;
+        if (!seenAchievements[key]) {
+          newUnlocks.push(`${ach.title} (${tier.name})`);
+        }
+      });
+    });
+
+    if (newUnlocks.length > 0) {
+      setNewlyUnlocked(newUnlocks);
+      newUnlocks.forEach(unlockText => {
+        addNotification(`¡Logro desbloqueado: ${unlockText}!`);
+      });
+      const timer = setTimeout(() => {
+        setSeenAchievements(prev => {
+          const updated = { ...prev };
+          allAchievementsWithProgress.forEach(ach => {
+            ach.unlockedTiers.forEach((tier, index) => {
+              updated[`${ach.id}-${index}`] = true;
+            });
+          });
+          return updated;
+        });
+      }, 500);
+      const clearTimer = setTimeout(() => setNewlyUnlocked([]), 3500);
+      return () => { clearTimeout(timer); clearTimeout(clearTimer); };
+    }
+  }, [allAchievementsWithProgress, seenAchievements, setSeenAchievements, addNotification]);
+
+    const seasonalStats = useMemo(() => {
+        const statsByYear: { [year: string]: { [key in GoalMetric]?: number } & { matchesPlayed: number } } = {};
+        const years = Array.from(new Set(matches.map(m => parseLocalDate(m.date).getFullYear())));
+        
+        years.forEach(year => {
+            const yearMatches = matches.filter(m => parseLocalDate(m.date).getFullYear() === year);
+            const totalMatches = yearMatches.length;
+            if (totalMatches > 0) {
+                const wins = yearMatches.filter(m => m.result === 'VICTORIA').length;
+                const draws = yearMatches.filter(m => m.result === 'EMPATE').length;
+                const goals = yearMatches.reduce((sum, m) => sum + m.myGoals, 0);
+                const assists = yearMatches.reduce((sum, m) => sum + m.myAssists, 0);
+                const records = calculateHistoricalRecords(yearMatches);
+
+                statsByYear[year.toString()] = {
+                    matchesPlayed: totalMatches,
+                    myGoals: goals,
+                    myAssists: assists,
+                    VICTORIA: wins,
+                    winRate: (wins / totalMatches) * 100,
+                    gpm: goals / totalMatches,
+                    longestWinStreak: records.longestWinStreak.value,
+                    longestUndefeatedStreak: records.longestUndefeatedStreak.value,
+                    undefeatedRate: ((wins + draws) / totalMatches) * 100,
+                };
+            }
+        });
+        return statsByYear;
+    }, [matches]);
+
+    const historicalContext = useMemo(() => {
+        let relevantMatches: Match[];
+        const effectivePeriodType = goalType === 'peak' ? 'all' : periodType;
+
+        if (effectivePeriodType === 'all') {
+            relevantMatches = matches;
+        } else if (effectivePeriodType === 'year') {
+            relevantMatches = matches.filter(m => parseLocalDate(m.date).getFullYear().toString() === selectedYearForGoal);
+        } else { // range
+            if (!startMonth || !endMonth || startMonth > endMonth) {
+                relevantMatches = [];
+            } else {
+                const [startY, startM] = startMonth.split('-').map(Number);
+                const [endY, endM] = endMonth.split('-').map(Number);
+                const startDate = new Date(startY, startM - 1, 1);
+                const endDate = new Date(endY, endM, 0, 23, 59, 59);
+                // FIX: Explicitly cast m to any to handle potential unknown type when strict mode is enabled or inference is lost.
+                relevantMatches = matches.filter((m: any) => {
+                    const matchDate = parseLocalDate(m.date);
+                    return matchDate >= startDate && matchDate <= endDate;
+                });
+            }
+        }
+
+        const totalMatches = relevantMatches.length;
+        if (totalMatches === 0 && goalType !== 'peak') return { currentValue: 0, historicalBest: 0 };
+
+        let currentValue: number = 0;
+        let historicalBest: number = 0;
+        
+        // FIX: Using explicit string cast and Record<string, any> for index access to avoid "Type 'unknown' cannot be used as an index type" error
+        const metricKey = goalMetric as string;
+        const allSeasonalValues = Object.values(seasonalStats).map((s: any) => (s as Record<string, any>)[metricKey] || 0);
+        
+        if (goalType === 'peak') {
+            const records = calculateHistoricalRecords(relevantMatches);
+            currentValue = goalMetric === 'myGoals' ? records.bestGoalPerformance.value : goalMetric === 'myAssists' ? records.bestAssistPerformance.value : 0;
+            historicalBest = goalMetric === 'myGoals' ? historicalRecords.bestGoalPerformance.value : goalMetric === 'myAssists' ? historicalRecords.bestAssistPerformance.value : 0;
+        } else {
+            switch (goalMetric) {
+                case 'myGoals': case 'myAssists': case 'VICTORIA':
+                    currentValue = relevantMatches.reduce((sum, m) => {
+                        if (goalMetric === 'VICTORIA') return m.result === 'VICTORIA' ? sum + 1 : sum;
+                        // FIX: Explicitly cast m to any for index access to prevent indexing errors
+                        return sum + ((m as any)[metricKey] || 0);
+                    }, 0);
+                    historicalBest = Math.max(0, ...allSeasonalValues);
+                    break;
+                case 'winRate': currentValue = (relevantMatches.filter(m => m.result === 'VICTORIA').length / totalMatches) * 100; historicalBest = Math.max(0, ...allSeasonalValues); break;
+                case 'undefeatedRate': currentValue = (relevantMatches.filter(m => m.result !== 'DERROTA').length / totalMatches) * 100; historicalBest = Math.max(0, ...allSeasonalValues); break;
+                case 'gpm': currentValue = relevantMatches.reduce((sum, m) => sum + m.myGoals, 0) / totalMatches; historicalBest = Math.max(0, ...allSeasonalValues); break;
+                case 'longestWinStreak': case 'longestUndefeatedStreak':
+                    const records = calculateHistoricalRecords(relevantMatches);
+                    // FIX: Cast to any to avoid narrowing issues with GoalMetric and HistoricalRecords keys as indexers
+                    currentValue = (records as any)[metricKey].value;
+                    historicalBest = (historicalRecords as any)[metricKey].value;
+                    break;
+                default: currentValue = 0; historicalBest = 0;
+            }
+        }
+
+        if (effectivePeriodType === 'all') {
+            historicalBest = currentValue;
+        }
+
+        return { currentValue: isNaN(currentValue) ? 0 : currentValue, historicalBest };
+    }, [matches, goalMetric, goalType, periodType, selectedYearForGoal, startMonth, endMonth, seasonalStats, historicalRecords]);
+
+    const suggestedTargets = useMemo(() => {
+        const { currentValue, historicalBest } = historicalContext;
+        let realistic: number, ambitious: number;
+
+        if (goalType === 'peak' || goalType === 'streak') {
+            realistic = currentValue + 1;
+            ambitious = historicalBest + 1;
+        } else {
+            switch (goalMetric) {
+                case 'myGoals': case 'myAssists': case 'VICTORIA':
+                    realistic = Math.ceil(currentValue * 1.15) || 5;
+                    ambitious = Math.ceil(historicalBest * 1.1) || 10;
+                    break;
+                case 'winRate': case 'undefeatedRate':
+                   realistic = Math.min(100, Math.ceil((currentValue + 5) / 5) * 5);
+                   ambitious = Math.min(100, Math.ceil((historicalBest + 2) / 5) * 5);
+                   break;
+                case 'gpm':
+                    realistic = parseFloat((currentValue * 1.15).toFixed(2)) || 0.5;
+                    ambitious = parseFloat((historicalBest * 1.1).toFixed(2)) || 1;
+                    break;
+                default:
+                    realistic = 1; ambitious = 2;
+            }
+        }
+        
+        if (ambitious <= realistic) {
+            ambitious = realistic + (['winRate', 'undefeatedRate'].includes(goalMetric) ? 5 : ['gpm'].includes(goalMetric) ? 0.25 : Math.max(1, Math.ceil(realistic * 0.2)));
+            if (['winRate', 'undefeatedRate'].includes(goalMetric)) ambitious = Math.min(100, ambitious);
+            if (goalMetric === 'gpm') ambitious = parseFloat(ambitious.toFixed(2));
+        }
+
+        return { realistic: Math.max(1, realistic), ambitious: Math.max(1, ambitious) };
+    }, [historicalContext, goalMetric, goalType]);
+
+    const difficultyLabel = useMemo(() => {
+        const target = Number(goalTarget);
+        if (!target) return '';
+        const { currentValue, historicalBest } = historicalContext;
+        if (target <= currentValue) return 'Fácil';
+        if (target <= historicalBest) return 'Desafiante';
+        if (target > historicalBest * 1.5) return '¡Épica!';
+        if (target > historicalBest) return '¡Nuevo Récord!';
+        return 'Ambicioso';
+    }, [goalTarget, historicalContext]);
+
+  const handleAddGoal = (e: React.FormEvent) => {
+    e.preventDefault();
+    const target = goalMetric === 'undefeatedRate' ? 100 : Number(goalTarget);
+    if (!target || target <= 0) return;
+
+    let startDate: string | undefined;
+    let endDate: string | undefined;
+
+    if (goalType !== 'peak') {
+        if (periodType === 'year') {
+            startDate = `${selectedYearForGoal}-01-01`;
+            endDate = `${selectedYearForGoal}-12-31`;
+        } else if (periodType === 'range' && startMonth && endMonth) {
+            const [startY, startM] = startMonth.split('-').map(Number);
+            const [endY, endM] = endMonth.split('-').map(Number);
+            startDate = `${startY}-${String(startM).padStart(2, '0')}-01`;
+            const lastDayOfMonth = new Date(endY, endM, 0).getDate();
+            endDate = `${endY}-${String(endM).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
+        }
+    }
+    
+    addGoal({ metric: goalMetric, goalType, target, title: goalTitle, startDate, endDate });
+    setGoalTarget('');
+    setGoalTitle('');
+    setIsTitleManuallyEdited(false);
+  };
+
+  const handleGenerateAdvice = async () => {
+    try {
+        checkAILimit();
+        setIsGeneratingAdvice(true);
+        setAdviceError(null);
+        setAiAchievementSuggestions([]);
+        const achievementSuggestions = await generateAchievementSuggestions(matches, [...achievementsList, ...customAchievements]);
+        setAiAchievementSuggestions(achievementSuggestions);
+        if (achievementSuggestions.length > 0) await addAIInteraction('achievement_suggestion', achievementSuggestions);
+    } catch (error: any) {
+        setAdviceError(error.message || "Error al generar consejos.");
+    } finally {
+        setIsGeneratingAdvice(false);
+    }
+  };
+  
+  const handleAddSuggestionAsAchievement = (suggestion: AIAchievementSuggestion) => {
+    addCustomAchievement(suggestion);
+    setAiAchievementSuggestions(prev => prev.filter(s => s.title !== suggestion.title));
+  };
+  
+  const handleAddCustomAchievement = (e: React.FormEvent) => {
+      e.preventDefault();
+      const value = Number(customAchValue);
+      if (!customAchTitle.trim() || !customAchDesc.trim() || !value || value <= 0) {
+        alert("Por favor, completa todos los campos del desafío.");
+        return;
+      }
+      addCustomAchievement({
+        title: customAchTitle,
+        description: customAchDesc,
+        icon: customAchIcon,
+        condition: {
+          metric: customAchMetric,
+          operator: 'greater_than_or_equal_to',
+          value: value,
+          window: value, // Use value as window size for simple streak achievements
+        },
+      });
+      // Reset form
+      setCustomAchTitle('');
+      setCustomAchDesc('');
+      setCustomAchIcon('🏆');
+      setCustomAchMetric('winStreak');
+      setCustomAchValue('');
+    };
+  
+  const debouncedGenerateTitle = useCallback(
+    debounce(async (metric: GoalMetric, type: GoalType, target: number, period: string) => {
+      if (isTitleManuallyEdited || target <= 0) return;
+      setIsGeneratingTitle(true);
+      const title = await generateCreativeGoalTitle(metricLabels[metric], type, target, period);
+      setGoalTitle(title);
+      setIsGeneratingTitle(false);
+    }, 1000),
+    [isTitleManuallyEdited]
+  );
+  
+  const periodTextForAI = useMemo(() => {
+    if (goalType === 'peak') return 'en un solo partido';
+    if (periodType === 'all') return 'histórico';
+    if (periodType === 'year') return `la temporada ${selectedYearForGoal}`;
+    if (periodType === 'range' && startMonth && endMonth) {
+        const [startY, startM] = startMonth.split('-').map(Number);
+        const [endY, endM] = endMonth.split('-').map(Number);
+        const formatMonth = (year: number, month: number) => new Date(year, month - 1).toLocaleString('es-ES', { month: 'long' });
+
+        if (startMonth === endMonth) return `${formatMonth(startY, startM)} de ${startY}`;
+        if (startY === endY) return `entre ${formatMonth(startY, startM)} y ${formatMonth(endY, endM)} de ${startY}`;
+        return `de ${formatMonth(startY, startM)} ${startY} a ${formatMonth(endY, endM)} ${endY}`;
+    }
+    return '';
+  }, [periodType, goalType, selectedYearForGoal, startMonth, endMonth]);
+  
+  useEffect(() => {
+    const target = goalMetric === 'undefeatedRate' ? 100 : Number(goalTarget);
+    if (target > 0 && !isTitleManuallyEdited && periodTextForAI) {
+      debouncedGenerateTitle(goalMetric, goalType, target, periodTextForAI);
+    }
+  }, [goalTarget, goalMetric, goalType, periodTextForAI, isTitleManuallyEdited, debouncedGenerateTitle]);
+
+  const { historicalGoals, seasonalGoals } = useMemo(() => {
+    const historical: Goal[] = [];
+    const seasonal: Goal[] = [];
+    
+    goals.forEach(g => {
+        const prog = getProgressForGoal(g, matches);
+        if (prog < g.target) {
+            if (g.startDate && g.endDate) {
+                seasonal.push(g);
+            } else {
+                historical.push(g);
+            }
+        }
+    });
+    seasonal.sort((a, b) => parseLocalDate(b.startDate!).getTime() - parseLocalDate(a.startDate!).getTime());
+    return { historicalGoals: historical, seasonalGoals: seasonal };
+  }, [goals, matches]);
+  
+  const futureYearsForGoal = useMemo(() => {
+    const current = new Date().getFullYear();
+    return [current, current + 1, current + 2];
+  }, []);
+
+  const futureMonths = useMemo(() => {
+    const months: string[] = [];
+    const currentDate = new Date();
+    currentDate.setDate(1);
+    for (let i = 0; i < 24; i++) {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
+      months.push(`${year}-${String(month).padStart(2, '0')}`);
+      currentDate.setMonth(currentDate.getMonth() + 1);
+    }
+    return months;
+  }, []);
+  
+  useEffect(() => {
+    if (startMonth > endMonth) {
+      setEndMonth(startMonth);
+    }
+  }, [startMonth, endMonth]);
+  
+  const endMonthOptions = useMemo(() => {
+    return futureMonths.filter(month => month >= startMonth);
+  }, [futureMonths, startMonth]);
+
+  const formatMonthYear = (monthYear: string) => {
+    if (!monthYear) return '';
+    const [year, month] = monthYear.split('-');
+    return new Date(Number(year), Number(month) - 1).toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+  };
+
+  const handleDeleteGoalClick = (goalId: string) => {
+    setConfirmState({ isOpen: true, type: 'goal', id: goalId });
+  };
+
+  const handleDeleteAchievementClick = (achievementId: string) => {
+    setConfirmState({ isOpen: true, type: 'achievement', id: achievementId });
+  };
+
+  const confirmAction = async () => {
+    if (confirmState.type === 'goal' && confirmState.id) {
+        await deleteGoal(confirmState.id);
+    } else if (confirmState.type === 'achievement' && confirmState.id) {
+        await deleteCustomAchievement(confirmState.id);
+    }
+    setConfirmState({ isOpen: false, type: null });
+  };
+
+  const styles: { [key: string]: React.CSSProperties } = {
+    container: { maxWidth: '1200px', margin: '0 auto', padding: `${theme.spacing.extraLarge} ${theme.spacing.medium}` },
+    pageTitle: { fontSize: theme.typography.fontSize.extraLarge, fontWeight: 700, color: theme.colors.primaryText, margin: `0`, borderLeft: `4px solid ${theme.colors.accent2}`, paddingLeft: theme.spacing.medium },
+    infoButton: {
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        padding: 0,
+        display: 'flex',
+        alignItems: 'center',
+    },
+    headerActions: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: theme.spacing.small,
+    },
+    contentWrapper: {
+        display: isDesktop ? 'grid' : 'flex',
+        flexDirection: 'column',
+        gridTemplateColumns: 'minmax(450px, 35%) 1fr',
+        gap: theme.spacing.extraLarge,
+        alignItems: 'start',
+    },
+    leftColumn: {
+        position: isDesktop ? 'sticky' : 'static',
+        top: `calc(65px + ${theme.spacing.extraLarge})`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: theme.spacing.large,
+    },
+    rightColumn: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: theme.spacing.extraLarge,
+    },
+    sectionTitle: { fontSize: theme.typography.fontSize.large, fontWeight: 700, color: theme.colors.primaryText, marginBottom: theme.spacing.large, paddingLeft: theme.spacing.medium, display: 'flex', alignItems: 'center', gap: theme.spacing.medium },
+    section: { display: 'flex', flexDirection: 'column' as 'column', gap: theme.spacing.large },
+    form: { display: 'flex', flexDirection: 'column' as 'column', gap: theme.spacing.large },
+    formRow: { display: 'flex', gap: theme.spacing.medium, alignItems: 'flex-start', flexWrap: 'wrap' as 'wrap' },
+    fieldGroup: { display: 'flex', flexDirection: 'column' as 'column', gap: theme.spacing.small, flex: 1, minWidth: '120px' },
+    label: { fontSize: theme.typography.fontSize.small, color: theme.colors.secondaryText, fontWeight: 500, height: '1.2em' },
+    input: { width: '100%', padding: theme.spacing.medium, backgroundColor: theme.colors.background, border: `1px solid ${theme.colors.borderStrong}`, borderRadius: theme.borderRadius.medium, color: theme.colors.primaryText, fontSize: theme.typography.fontSize.medium },
+    button: {
+      padding: '0.875rem 1.25rem',
+      borderRadius: theme.borderRadius.medium, fontSize: theme.typography.fontSize.medium,
+      fontWeight: 'bold', cursor: 'pointer', alignSelf: 'flex-end', marginTop: '1.2rem',
+      transition: 'background-color 0.2s, color 0.2s, border 0.2s',
+      backgroundColor: isAddGoalHovered ? theme.colors.accent1 : 'transparent',
+      color: isAddGoalHovered ? theme.colors.textOnAccent : theme.colors.accent1,
+      border: `1px solid ${theme.colors.accent1}`
+    },
+    goalsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: theme.spacing.large },
+    achievementsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: theme.spacing.large },
+    achievementCard: { display: 'flex', flexDirection: 'column' as 'column', gap: '0.75rem' },
+    achHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' },
+    achTitle: { margin: 0, fontSize: theme.typography.fontSize.large, color: theme.colors.primaryText, flex: 1 },
+    achTiers: { display: 'flex', gap: '0.5rem', fontSize: '1.5rem' },
+    achTierIcon: { opacity: 0.3 },
+    unlockedTier: { opacity: 1 },
+    description: { margin: 0, fontSize: theme.typography.fontSize.small, color: theme.colors.secondaryText, lineHeight: 1.6 },
+    notification: { position: 'fixed' as 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)', backgroundColor: theme.colors.surface, color: theme.colors.primaryText, padding: `${theme.spacing.medium} ${theme.spacing.large}`, borderRadius: theme.borderRadius.medium, boxShadow: theme.shadows.large, border: `1px solid ${theme.colors.accent1}`, zIndex: 9999, display: 'flex', alignItems: 'center', gap: theme.spacing.medium, animation: 'notification-fade-in-out 3s ease-in-out forwards' },
+    headerCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    aiButton: {
+      padding: `${theme.spacing.medium} ${theme.spacing.large}`,
+      borderRadius: theme.borderRadius.medium, cursor: 'pointer', fontWeight: 700,
+      fontSize: theme.typography.fontSize.medium, display: 'inline-flex', alignItems: 'center',
+      gap: theme.spacing.small, transition: 'background-color 0.2s, color 0.2s, border 0.2s',
+      alignSelf: 'center',
+      backgroundColor: isGenerateAdviceHovered ? theme.colors.accent2 : 'transparent',
+      color: isGenerateAdviceHovered ? theme.colors.textOnAccent : theme.colors.accent2,
+      border: `1px solid ${theme.colors.accent2}`
+    },
+    suggestionCard: { border: `1px dashed ${theme.colors.accent2}`, display: 'flex', flexDirection: 'column' as 'column', gap: theme.spacing.medium },
+    suggestionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: theme.spacing.medium },
+    suggestionTitle: { margin: 0, fontSize: '1rem', fontWeight: 'bold', flex: 1, minWidth: 0 },
+    addSuggestionButton: { background: 'none', border: `1px solid ${theme.colors.win}`, color: theme.colors.win, borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', fontSize: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+    deleteCustomButton: { position: 'absolute' as 'absolute', top: '0.5rem', right: '0.5rem', background: 'none', border: 'none', color: theme.colors.secondaryText, cursor: 'pointer', fontSize: '1.5rem', lineHeight: 1, padding: '0.25rem' },
+    suggestionSubtitle: { fontSize: theme.typography.fontSize.medium, fontWeight: 700, color: theme.colors.primaryText, margin: `0 0 ${theme.spacing.medium} 0`, paddingBottom: theme.spacing.small, borderBottom: `1px solid ${theme.colors.border}` },
+    contextBox: { backgroundColor: theme.colors.background, padding: theme.spacing.medium, borderRadius: theme.borderRadius.medium, fontSize: theme.typography.fontSize.small, color: theme.colors.secondaryText, border: `1px solid ${theme.colors.border}`, textAlign: 'center' as 'center'},
+    suggestionButton: { 
+        background: 'transparent', border: `1px solid ${theme.colors.borderStrong}`, 
+        color: theme.colors.primaryText, padding: theme.spacing.medium, 
+        borderRadius: theme.borderRadius.medium, flex: 1, cursor: 'pointer', textAlign: 'center' as 'center',
+        transition: 'background-color 0.2s, color 0.2s',
+    },
+    difficultyLabel: { fontSize: theme.typography.fontSize.extraSmall, fontWeight: 600, color: theme.colors.accent2, height: '1em' },
+    challengeButton: {
+      padding: '0.875rem 1.25rem',
+      borderRadius: theme.borderRadius.medium, fontSize: theme.typography.fontSize.medium,
+      fontWeight: 'bold', cursor: 'pointer', alignSelf: 'stretch',
+      transition: 'background-color 0.2s, color 0.2s, border 0.2s',
+      backgroundColor: isAddChallengeHovered ? theme.colors.accent2 : 'transparent',
+      color: isAddChallengeHovered ? theme.colors.textOnAccent : theme.colors.accent2,
+      border: `1px solid ${theme.colors.accent2}`
+    },
+    tabContainer: {
+        position: 'relative',
+        display: 'flex',
+        borderBottom: `1px solid ${theme.colors.border}`,
+        marginBottom: theme.spacing.extraLarge,
+    },
+    tabButton: {
+        flex: 1,
+        padding: `${theme.spacing.medium} 0`,
+        background: 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+        fontSize: theme.typography.fontSize.medium,
+        fontWeight: 600,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: theme.spacing.small,
+        transition: 'color 0.3s ease',
+    },
+    tabIndicator: {
+        position: 'absolute',
+        bottom: '-1px',
+        height: '3px',
+        backgroundColor: theme.colors.accent1,
+        width: '50%',
+        transition: 'transform 0.3s ease-out',
+        borderRadius: '2px',
+    },
+  };
+  
+  const notificationText = newlyUnlocked.length === 1 ? `¡Has desbloqueado ${newlyUnlocked[0]}!` : `¡Has desbloqueado ${newlyUnlocked.length} nuevo(s) logro(s)!`;
+
+  const periodOptions = [
+    { value: 'year', label: 'Temporada' },
+    { value: 'range', label: 'Rango de Meses' },
+    { value: 'all', label: 'Histórico' },
+  ];
+
+  const goalBuilder = (
+      <section style={styles.section}>
+          <Card title="Planificador de carrera">
+            <form onSubmit={handleAddGoal} style={styles.form}>
+              <div style={styles.formRow}>
+                  <div style={styles.fieldGroup}>
+                      <label style={styles.label}>Elige una métrica</label>
+                      <select value={goalMetric} onChange={e => setGoalMetric(e.target.value as GoalMetric)} style={styles.input}>
+                          {Object.entries(metricLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                      </select>
+                  </div>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Elige el tipo de meta</label>
+                    <select value={goalType} onChange={e => setGoalType(e.target.value as GoalType)} style={styles.input}>
+                        {availableGoalTypes.map(type => <option key={type} value={type}>{goalTypeLabels[type]}</option>)}
+                    </select>
+                  </div>
+              </div>
+                
+              {isPeriodSelectionVisible && (
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Elige un período</label>
+                    <select value={periodType} onChange={e => setPeriodType(e.target.value as 'year' | 'range' | 'all')} style={styles.input}>
+                        {periodOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </div>
+              )}
+                
+              {isPeriodSelectionVisible && periodType === 'year' && (
+                  <div style={styles.fieldGroup}>
+                      <select value={selectedYearForGoal} onChange={e => setSelectedYearForGoal(e.target.value)} style={styles.input}>
+                          {futureYearsForGoal.map(year => <option key={year} value={year.toString()}>Temporada {year}</option>)}
+                      </select>
+                  </div>
+              )}
+              {isPeriodSelectionVisible && periodType === 'range' && (
+                  <div style={styles.formRow}>
+                      <div style={styles.fieldGroup}>
+                          <label style={styles.label}>Desde</label>
+                          <select value={startMonth} onChange={e => setStartMonth(e.target.value)} style={styles.input}>
+                              {futureMonths.map(month => <option key={month} value={month}>{formatMonthYear(month)}</option>)}
+                          </select>
+                      </div>
+                      <div style={styles.fieldGroup}>
+                          <label style={styles.label}>Hasta</label>
+                           <select value={endMonth} onChange={e => setEndMonth(e.target.value)} style={styles.input}>
+                              {endMonthOptions.map(month => <option key={month} value={month}>{formatMonthYear(month)}</option>)}
+                          </select>
+                      </div>
+                  </div>
+              )}
+
+              <div style={styles.contextBox}>
+                <strong>Inteligencia deportiva:</strong> Situación actual: <strong>{historicalContext.currentValue.toFixed(['gpm', 'winRate', 'undefeatedRate'].includes(goalMetric) ? 2 : 0)}</strong> / Récord histórico: <strong>{historicalContext.historicalBest.toFixed(['gpm', 'winRate', 'undefeatedRate'].includes(goalMetric) ? 2 : 0)}</strong>.
+              </div>
+              
+              {isTargetInputVisible && (
+                <div>
+                  <label style={styles.label}>Establece un objetivo</label>
+                  <div style={{...styles.formRow, alignItems: 'stretch' }}>
+                      <button type="button" onClick={() => setGoalTarget(suggestedTargets.realistic)} style={styles.suggestionButton}>
+                        <div style={{fontWeight: 700}}>Meta realista</div>
+                        <div style={{fontSize: '1.5rem', color: theme.colors.accent1}}>{suggestedTargets.realistic.toFixed(['gpm', 'winRate', 'undefeatedRate'].includes(goalMetric) ? 2 : 0)}</div>
+                      </button>
+                      <button type="button" onClick={() => setGoalTarget(suggestedTargets.ambitious)} style={styles.suggestionButton}>
+                        <div style={{fontWeight: 700}}>Meta soñada</div>
+                        <div style={{fontSize: '1.5rem', color: theme.colors.accent2}}>{suggestedTargets.ambitious.toFixed(['gpm', 'winRate', 'undefeatedRate'].includes(goalMetric) ? 2 : 0)}</div>
+                      </button>
+                      <div style={{...styles.fieldGroup, flex: 0.8}}>
+                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline'}}>
+                            <label style={{...styles.label, height: 'auto'}}>Personalizada</label>
+                            <span style={styles.difficultyLabel}>{difficultyLabel}</span>
+                        </div>
+                        <input type="number" step="0.01" min="1" value={goalTarget} onChange={e => setGoalTarget(e.target.value)} style={styles.input} placeholder="Ej: 20" required/>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div style={styles.fieldGroup}>
+                  <label style={styles.label}>Nombra tu meta {isGeneratingTitle && <Loader />}</label>
+                  <input type="text" value={goalTitle} onChange={e => { setGoalTitle(e.target.value); setIsTitleManuallyEdited(true); }} style={styles.input} placeholder="Título creativo de la meta..." required/>
+              </div>
+
+              <button 
+                type="submit" 
+                style={styles.button}
+                onMouseEnter={() => setIsAddGoalHovered(true)}
+                onMouseLeave={() => setIsAddGoalHovered(false)}
+              >
+                  Fijar objetivo
+              </button>
+            </form>
+          </Card>
+      </section>
+  );
+
+  const challengeBuilder = (
+    <section style={styles.section}>
+        <Card title="Crear desafío personalizado">
+            <form onSubmit={handleAddCustomAchievement} style={styles.form}>
+                <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Título del desafío</label>
+                    <input type="text" value={customAchTitle} onChange={e => setCustomAchTitle(e.target.value)} style={styles.input} placeholder="Ej: El Inquebrantable" required />
+                </div>
+                <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Descripción</label>
+                    <textarea value={customAchDesc} onChange={e => setCustomAchDesc(e.target.value)} style={{...styles.input, minHeight: '60px'}} placeholder="Ej: Mantente invicto por 5 partidos" required />
+                </div>
+                <div style={styles.formRow}>
+                    <div style={{...styles.fieldGroup, flex: 0.5}}>
+                        <label style={styles.label}>Ícono (Emoji)</label>
+                        <input type="text" value={customAchIcon} onChange={e => setCustomAchIcon(e.target.value)} style={styles.input} maxLength={2} />
+                    </div>
+                    <div style={styles.fieldGroup}>
+                        <label style={styles.label}>Condición</label>
+                        <select value={customAchMetric} onChange={e => setCustomAchMetric(e.target.value as AchievementCondition['metric'])} style={styles.input}>
+                            {Object.entries(achievementMetricLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                        </select>
+                    </div>
+                    <div style={{...styles.fieldGroup, flex: 0.8}}>
+                        <label style={styles.label}>Valor</label>
+                        <input type="number" min="1" value={customAchValue} onChange={e => setCustomAchValue(e.target.value)} style={styles.input} placeholder="Ej: 5" required />
+                    </div>
+                </div>
+                <button 
+                    type="submit" 
+                    style={{...styles.challengeButton, alignSelf: 'stretch', marginTop: '1rem'}}
+                    onMouseEnter={() => setIsAddChallengeHovered(true)}
+                    onMouseLeave={() => setIsAddChallengeHovered(false)}
+                >
+                    Añadir desafío
+                </button>
+            </form>
+        </Card>
+    </section>
+);
+  
+
+  return (
+    <>
+      <TutorialModal 
+          isOpen={isTutorialOpen}
+          onClose={(dontShowAgain) => {
+              setIsTutorialOpen(false);
+              if(dontShowAgain) markTutorialAsSeen();
+          }}
+          steps={tutorialSteps}
+      />
+      <ShareViewModal 
+        isOpen={isShareModalOpen} 
+        onClose={() => setIsShareModalOpen(false)} 
+        page="progress"
+      />
+      <style>{`
+        @keyframes notification-fade-in-out { 0%, 100% { opacity: 0; transform: translate(-50%, -20px); } 15%, 85% { opacity: 1; transform: translate(-50%, 0); } }
+        @keyframes contentFadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .tab-content-enter {
+          animation: contentFadeIn 0.4s ease-out forwards;
+        }
+      `}</style>
+      <main style={styles.container}>
+        {newlyUnlocked.length > 0 && <div style={styles.notification}><TrophyIcon /><span>{notificationText}</span></div>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.medium, marginBottom: theme.spacing.extraLarge }}>
+            <h2 style={{ ...styles.pageTitle, marginBottom: 0 }}>Carrera y evolución</h2>
+            {!isShareMode && (
+                <div style={styles.headerActions}>
+                    <button onClick={() => setIsShareModalOpen(true)} style={styles.infoButton} aria-label="Compartir vista">
+                        <ShareIcon color={theme.colors.secondaryText} size={20} />
+                    </button>
+                    <button onClick={() => setIsTutorialOpen(true)} style={styles.infoButton} aria-label="Mostrar guía">
+                        <InfoIcon color={theme.colors.secondaryText} size={20}/>
+                    </button>
+                </div>
+            )}
+        </div>
+        
+        <div style={styles.tabContainer}>
+            <button
+                style={{...styles.tabButton, color: activeTab === 'goals' ? theme.colors.primaryText : theme.colors.secondaryText}}
+                onClick={() => setActiveTab('goals')}
+            >
+                <TargetIcon color={activeTab === 'goals' ? theme.colors.accent1 : 'currentColor'} /> Objetivos
+            </button>
+            <button
+                style={{...styles.tabButton, color: activeTab === 'achievements' ? theme.colors.primaryText : theme.colors.secondaryText}}
+                onClick={() => setActiveTab('achievements')}
+            >
+                <TrophyIcon color={activeTab === 'achievements' ? theme.colors.accent1 : 'currentColor'} /> Sala de Trofeos
+            </button>
+            <div
+                style={{...styles.tabIndicator, transform: `translateX(${activeTab === 'goals' ? '0%' : '100%'})`}}
+            />
+        </div>
+        
+        <div key={activeTab} className="tab-content-enter">
+            {activeTab === 'goals' && (
+                <div style={styles.contentWrapper}>
+                    <div style={styles.leftColumn}>
+                        {goalBuilder}
+                    </div>
+                    <div style={styles.rightColumn}>
+                        {seasonalGoals.length > 0 && (
+                            <section style={styles.section}>
+                                <h3 style={styles.sectionTitle}>Misiones de Temporada</h3>
+                                <div style={styles.goalsGrid}>{seasonalGoals.map(goal => <GoalCard key={goal.id} goal={goal} progress={getProgressForGoal(goal, matches)} onDelete={() => handleDeleteGoalClick(goal.id)} />)}</div>
+                            </section>
+                        )}
+                        {historicalGoals.length > 0 && (
+                            <section style={styles.section}>
+                                <h3 style={styles.sectionTitle}>Hitos de carrera</h3>
+                                <div style={styles.goalsGrid}>{historicalGoals.map(goal => <GoalCard key={goal.id} goal={goal} progress={getProgressForGoal(goal, matches)} onDelete={() => handleDeleteGoalClick(goal.id)} />)}</div>
+                            </section>
+                        )}
+                        {goals.length === 0 && (
+                        <p style={{color: theme.colors.secondaryText, textAlign: 'center', fontStyle: 'italic'}}>El primer paso para la grandeza es definir el destino. Fija tu primer objetivo ahora.</p>
+                        )}
+                        <HistoryAccordion type="goals" />
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'achievements' && (
+                 <div style={styles.contentWrapper}>
+                    <div style={styles.leftColumn}>
+                        {challengeBuilder}
+                    </div>
+                    <div style={styles.rightColumn}>
+                        <p style={{
+                            color: theme.colors.secondaryText,
+                            fontStyle: 'italic',
+                            textAlign: 'center',
+                            paddingBottom: theme.spacing.medium,
+                            borderBottom: `1px solid ${theme.colors.border}`,
+                            margin: `-${theme.spacing.medium} 0 ${theme.spacing.medium} 0`
+                        }}>
+                            La gloria es eterna. Aquí yacen los hitos que definen tu leyenda.
+                        </p>
+                        <section style={styles.section}>
+                            <h3 style={{...styles.sectionTitle, fontSize: '1.1rem', color: theme.colors.secondaryText, border: 'none', paddingLeft: 0, marginBottom: theme.spacing.medium}}><TrophyIcon size={24} /> Sala de Trofeos</h3>
+                            <Card>
+                                <div style={{display: 'flex', flexDirection: 'column', gap: theme.spacing.extraLarge}}>
+                                <div>
+                                    <h4 style={{...styles.sectionTitle, fontSize: '1.1rem', color: theme.colors.secondaryText, border: 'none', paddingLeft: 0, marginBottom: theme.spacing.medium}}>Medallas de honor</h4>
+                                    <div style={styles.achievementsGrid}>
+                                        {allAchievementsWithProgress.map(ach => {
+                                        const isUnlocked = ach.unlockedTiers.length > 0;
+                                        if (ach.isSecret && !isUnlocked) return null;
+
+                                        const nextTier = ach.nextTier;
+                                        const progressPercentage = nextTier ? Math.min((ach.currentProgress / nextTier.target) * 100, 100) : 100;
+
+                                        return (
+                                            <Card key={ach.id} style={{...styles.achievementCard, opacity: isUnlocked ? 1 : 0.5}}>
+                                            <div style={styles.achHeader}>
+                                                <h4 style={styles.achTitle}>{ach.title}</h4>
+                                                <div style={styles.achTiers}>
+                                                {ach.tiers.map((tier, index) => (
+                                                    <span key={index} style={ach.unlockedTiers.includes(tier) ? styles.unlockedTier : styles.achTierIcon} title={`${tier.name}: ${tier.target}`}>
+                                                    {tier.icon}
+                                                    </span>
+                                                ))}
+                                                </div>
+                                            </div>
+                                            <p style={styles.description}>{ach.description}</p>
+                                            {nextTier && (
+                                                <div>
+                                                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem'}}>
+                                                        <span style={{fontSize: '0.75rem', color: theme.colors.secondaryText}}>Próximo: {nextTier.name}</span>
+                                                        <span style={{fontSize: '0.875rem', fontWeight: 700, color: theme.colors.primaryText}}>{ach.currentProgress} / {nextTier.target}</span>
+                                                    </div>
+                                                    <div style={{width: '100%', backgroundColor: theme.colors.border, borderRadius: '6px', overflow: 'hidden', height: '6px' }}>
+                                                        <div style={{ height: '100%', backgroundColor: theme.colors.accent2, transition: 'width 0.5s ease', borderRadius: '6px', width: `${progressPercentage}%` }} />
+                                                    </div>
+                                                </div>
+                                            )}
+                                            </Card>
+                                        )
+                                        })}
+                                    </div>
+                                </div>
+                                <section style={styles.section}>
+                                    <h3 style={{...styles.sectionTitle, fontSize: '1.1rem', color: theme.colors.secondaryText, border: 'none', paddingLeft: 0, marginBottom: theme.spacing.medium}}><SparklesIcon /> Retos del míster</h3>
+                                    <div style={styles.achievementsGrid}>
+                                        {customAchievements.map(ach => (
+                                            <Card key={ach.id} style={{...styles.achievementCard, opacity: ach.unlocked ? 1 : 0.5, position: 'relative'}}>
+                                            <button onClick={() => handleDeleteAchievementClick(ach.id)} style={styles.deleteCustomButton} aria-label="Eliminar logro">&times;</button>
+                                            <div style={styles.achHeader}>
+                                                <h4 style={styles.achTitle}>{ach.title}</h4>
+                                                <div style={styles.achTiers}>
+                                                    <span style={ach.unlocked ? styles.unlockedTier : styles.achTierIcon} title={ach.unlocked ? 'Desbloqueado' : 'Pendiente'}>
+                                                        {ach.icon}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <p style={styles.description}>{ach.description}</p>
+                                            </Card>
+                                        ))}
+                                        {aiAchievementSuggestions.map(s => (
+                                            <Card key={s.title} style={styles.suggestionCard}>
+                                                <div style={styles.suggestionHeader}>
+                                                    <h4 style={styles.suggestionTitle}>{s.icon} {s.title}</h4>
+                                                    <button onClick={() => handleAddSuggestionAsAchievement(s)} style={styles.addSuggestionButton} title="Añadir como desafío">+</button>
+                                                </div>
+                                                <p style={styles.description}>{s.description}</p>
+                                            </Card>
+                                        ))}
+                                        <div style={{ textAlign: 'center' }}>
+                                            <button onClick={handleGenerateAdvice} disabled={isGeneratingAdvice} style={styles.aiButton} onMouseEnter={() => setIsGenerateAdviceHovered(true)} onMouseLeave={() => setIsGenerateAdviceHovered(false)}>
+                                                {isGeneratingAdvice ? <Loader/> : <SparklesIcon />}
+                                                {matches.length < 5 ? "Necesitas 5 partidos" : "Desafíame (IA)"}
+                                            </button>
+                                            <div style={{fontSize: '0.75rem', color: theme.colors.secondaryText, marginTop: '0.5rem'}}>Usos mensuales: {aiUsageCount}/{AI_MONTHLY_LIMIT}</div>
+                                            {adviceError && <p style={{color: theme.colors.loss, fontSize: '0.8rem'}}>{adviceError}</p>}
+                                        </div>
+                                    </div>
+                                </section>
+                                </div>
+                            </Card>
+                        </section>
+                        <HistoryAccordion type="achievements" />
+                    </div>
+                 </div>
+            )}
+        </div>
+        <ConfirmationModal
+            isOpen={confirmState.isOpen}
+            onClose={() => setConfirmState({ isOpen: false, type: null })}
+            onConfirm={confirmAction}
+            title={confirmState.type === 'goal' ? 'Eliminar Objetivo' : 'Eliminar Desafío'}
+            message="¿Estás seguro de que quieres eliminar esto? Esta acción no se puede deshacer."
+        />
+      </main>
+    </>
+  );
+};
+
+export default ProgressPage;
