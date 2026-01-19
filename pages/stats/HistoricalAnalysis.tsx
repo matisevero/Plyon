@@ -4,6 +4,9 @@ import type { Match } from '../../types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { ChevronIcon } from '../../components/icons/ChevronIcon';
 import { parseLocalDate } from '../../utils/analytics';
+import SectionHelp from '../../components/common/SectionHelp';
+import { CalendarIcon } from '../../components/icons/CalendarIcon';
+import { ClipboardIcon } from '../../components/icons/ClipboardIcon';
 
 interface HistoricalAnalysisProps {
   matches: Match[];
@@ -79,6 +82,11 @@ const HistoricalAnalysis: React.FC<HistoricalAnalysisProps> = ({ matches }) => {
   const initialState = getInitialState();
   const [expandedYear, setExpandedYear] = useState<string | null>(initialState.year);
   const [expandedMonth, setExpandedMonth] = useState<string | null>(initialState.month);
+
+  const historicalGuide = [
+      { title: "Desglose Mensual", content: "Profundiza en tus datos. Despliega cada año para ver tu rendimiento mes a mes.", icon: <CalendarIcon size={48} /> },
+      { title: "Detalle de Partidos", content: "Al expandir un mes, verás la lista de partidos jugados con sus estadísticas individuales.", icon: <ClipboardIcon size={48} /> }
+  ];
 
 
   const getResultStyle = (result: 'VICTORIA' | 'DERROTA' | 'EMPATE'): React.CSSProperties => {
@@ -208,7 +216,10 @@ const HistoricalAnalysis: React.FC<HistoricalAnalysisProps> = ({ matches }) => {
                                     ({stats.wins}-{stats.draws}-{stats.losses})
                                 </span>
                             </div>
-                            <ChevronIcon isExpanded={isExpanded} />
+                            <div style={{display: 'flex', alignItems: 'center'}}>
+                                {/* REMOVED SectionHelp from here */}
+                                <ChevronIcon isExpanded={isExpanded} />
+                            </div>
                           </div>
                           {isExpanded && (
                               <div className="fade-in-down">

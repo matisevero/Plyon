@@ -18,26 +18,127 @@ const getAI = () => {
     return ai;
 }
 
+export const moderateText = async (text: string): Promise<{ isToxic: boolean; reason?: string }> => {
+    const aiInstance = getAI();
+    if (!aiInstance) return { isToxic: false }; // Fail open if no AI
+
+    const prompt = `
+        Analiza el siguiente mensaje de un chat de una app de deportes para detectar toxicidad, insultos graves, acoso o discurso de odio.
+        Mensaje: "${text}"
+        
+        Devuelve un JSON.
+        - "isToxic": true si el mensaje viola normas básicas de convivencia.
+        - "reason": Breve explicación si es tóxico.
+        
+        Sé permisivo con la jerga futbolera (ej: "qué golazo", "te gané"), pero estricto con insultos personales o discriminación.
+    `;
+
+    try {
+        const response: GenerateContentResponse = await aiInstance.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        isToxic: { type: Type.BOOLEAN },
+                        reason: { type: Type.STRING }
+                    },
+                    required: ["isToxic"]
+                }
+            }
+        });
+        
+        const resultText = response.text?.trim();
+        if (!resultText) return { isToxic: false };
+        return JSON.parse(resultText);
+    } catch (error) {
+        console.error("Moderation error:", error);
+        return { isToxic: false }; // Fail open
+    }
+};
+
+export const parseMatchFromImage = async (base64Image: string): Promise<Partial<Match>> => {
+    const aiInstance = getAI();
+    if (!aiInstance) throw new Error("La IA no está configurada.");
+
+    // Remove header if present (e.g., "data:image/jpeg;base64,") because the SDK expects raw base64 usually, 
+    // but the inlineData helper handles it if we pass the right struct.
+    // Actually, for inlineData, we need the raw base64 string without the prefix.
+    const base64Data = base64Image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "");
+    const mimeType = base64Image.match(/^data:(image\/[a-zA-Z]+);base64,/)?.[1] || 'image/jpeg';
+
+    const prompt = `
+        Analiza esta imagen relacionada con un partido de fútbol (puede ser un marcador, una planilla de papel, una nota escrita a mano o una captura de pantalla).
+        
+        Tu tarea es extraer los datos del partido para el usuario principal ("Yo").
+        
+        INSTRUCCIONES:
+        1. Intenta identificar el Resultado (VICTORIA, DERROTA, EMPATE). Si ves un marcador (ej: 5-3), asume que el equipo con más goles ganó. Si no es obvio quién es "mi" equipo, intenta deducirlo o deja el resultado como VICTORIA por defecto.
+        2. Busca estadísticas individuales: Goles (myGoals) y Asistencias (myAssists). Si es una planilla con nombres, busca el que se parezca a un nombre de usuario o "Yo". Si solo es un marcador global, pon 0 en estadísticas individuales.
+        3. Extrae la fecha si es visible.
+        4. Devuelve un JSON limpio.
+    `;
+
+    try {
+        const response: GenerateContentResponse = await aiInstance.models.generateContent({
+            model: 'gemini-3-flash-preview', // Model supports multimodal input
+            contents: {
+                parts: [
+                    { inlineData: { mimeType, data: base64Data } },
+                    { text: prompt }
+                ]
+            },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        date: { type: Type.STRING },
+                        result: { type: Type.STRING, enum: ["VICTORIA", "EMPATE", "DERROTA"] },
+                        myGoals: { type: Type.NUMBER },
+                        myAssists: { type: Type.NUMBER },
+                        goalDifference: { type: Type.NUMBER },
+                        notes: { type: Type.STRING },
+                        tournament: { type: Type.STRING }
+                    },
+                    required: ["result", "myGoals"]
+                }
+            }
+        });
+
+        const resultText = response.text?.trim();
+        if (!resultText) return {};
+        return JSON.parse(resultText);
+    } catch (error) {
+        console.error("Error parsing image with AI:", error);
+        throw new Error("No se pudo interpretar la imagen.");
+    }
+};
+
 export const parseMatchesFromText = async (text: string): Promise<Partial<Match>[]> => {
     const aiInstance = getAI();
     if (!aiInstance) throw new Error("La IA no está configurada.");
 
     const prompt = `
-        Actúa como un asistente de entrada de datos deportivos. Tu tarea es extraer información sobre partidos de fútbol del siguiente texto no estructurado.
+        Actúa como un asistente de entrada de datos deportivos. Tu tarea es extraer información estructurada de partidos de fútbol a partir del texto del usuario.
         
         Texto del usuario:
         "${text}"
 
-        INSTRUCCIONES:
-        1. Identifica cada partido mencionado.
-        2. Extrae: Fecha (formato YYYY-MM-DD, si no hay año usa el actual, si no hay fecha usa hoy), Resultado (VICTORIA, DERROTA, EMPATE), Goles propios (myGoals), Asistencias propias (myAssists), Diferencia de gol (goalDifference), y Notas (cualquier detalle extra).
-        3. Si el usuario dice "ganamos 5-3 y metí 2", deduce que el resultado es VICTORIA, myGoals=2, y goalDifference=2.
-        4. Si no se menciona explícitamente, asume 0 para goles y asistencias.
+        INSTRUCCIONES CRÍTICAS:
+        1. Identifica el Resultado (VICTORIA, DERROTA, EMPATE).
+        2. Extrae estadísticas PERSONALES (del usuario que habla): 'myGoals' y 'myAssists'.
+        3. **ALINEACIONES**:
+           - Si el usuario menciona nombres como "jugué con Juan y Pedro", o "mi equipo era Matias y yo", agrégalos al array 'myTeamPlayers'.
+           - Si el usuario menciona rivales como "jugamos contra el equipo de Lucas", agrega los nombres al array 'opponentPlayers'.
+           - Asigna goles/asistencias a esos jugadores si se mencionan (ej: "Juan metió 2"). Si no, pon 0.
+        4. No pongas la alineación en 'notes'. 'notes' es solo para detalles extra (clima, sensaciones, lugar).
         5. Devuelve un array de objetos JSON.
     `;
 
     try {
-        // Fixed: Using gemini-3-flash-preview for basic text task.
         const response: GenerateContentResponse = await aiInstance.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: prompt,
@@ -54,7 +155,31 @@ export const parseMatchesFromText = async (text: string): Promise<Partial<Match>
                             myAssists: { type: Type.NUMBER },
                             goalDifference: { type: Type.NUMBER },
                             notes: { type: Type.STRING },
-                            tournament: { type: Type.STRING }
+                            tournament: { type: Type.STRING },
+                            myTeamPlayers: {
+                                type: Type.ARRAY,
+                                items: {
+                                    type: Type.OBJECT,
+                                    properties: {
+                                        name: { type: Type.STRING },
+                                        goals: { type: Type.NUMBER },
+                                        assists: { type: Type.NUMBER }
+                                    },
+                                    required: ["name"]
+                                }
+                            },
+                            opponentPlayers: {
+                                type: Type.ARRAY,
+                                items: {
+                                    type: Type.OBJECT,
+                                    properties: {
+                                        name: { type: Type.STRING },
+                                        goals: { type: Type.NUMBER },
+                                        assists: { type: Type.NUMBER }
+                                    },
+                                    required: ["name"]
+                                }
+                            }
                         },
                         required: ["date", "result", "myGoals", "myAssists"]
                     }
@@ -62,7 +187,6 @@ export const parseMatchesFromText = async (text: string): Promise<Partial<Match>
             }
         });
         
-        // Fixed: Accessing .text property directly (not as a function) as per guidelines.
         const resultText = response.text?.trim();
         if (!resultText) return [];
         return JSON.parse(resultText);
@@ -91,7 +215,6 @@ export const generateHighlightsSummary = async (matches: Match[]): Promise<Omit<
     `;
 
     try {
-        // Fixed: Using gemini-3-flash-preview for text analysis task.
         const response: GenerateContentResponse = await aiInstance.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: prompt,
@@ -118,7 +241,6 @@ export const generateHighlightsSummary = async (matches: Match[]): Promise<Omit<
             }
         });
         
-        // Fixed: Accessing .text property directly.
         const text = response.text?.trim();
         if (!text) {
             return [];
@@ -145,7 +267,6 @@ export const generateCoachingInsight = async (matches: Match[]): Promise<Coachin
     `;
 
     try {
-        // Fixed: Using gemini-3-flash-preview for coaching insights.
         const response: GenerateContentResponse = await aiInstance.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: prompt,
@@ -156,7 +277,6 @@ export const generateCoachingInsight = async (matches: Match[]): Promise<Coachin
                 }
             }
         });
-        // Fixed: Accessing .text property directly.
         const text = response.text?.trim();
         if (!text) {
           throw new Error("Empty response from AI for coaching insight.");
@@ -178,13 +298,11 @@ export const generateConsistencyAnalysis = async (contributions: number[]): Prom
   `;
 
   try {
-    // Fixed: Using gemini-3-flash-preview.
     const response: GenerateContentResponse = await aiInstance.models.generateContent({
         model: 'gemini-3-flash-preview', 
         contents: prompt, 
         config: { temperature: 0.7 } 
     });
-    // Fixed: Accessing .text property directly.
     return response.text?.trim() || "";
   } catch (error) {
     console.error("Gemini API call for consistency analysis failed:", error);
@@ -216,7 +334,6 @@ export const generateGoalSuggestions = async (matches: Match[], existingGoals: G
     `;
     
     try {
-        // Fixed: Using gemini-3-flash-preview.
         const response: GenerateContentResponse = await aiInstance.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: prompt,
@@ -225,7 +342,6 @@ export const generateGoalSuggestions = async (matches: Match[], existingGoals: G
                 responseSchema: { type: Type.OBJECT, properties: { suggestions: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, description: { type: Type.STRING }, metric: { type: Type.STRING }, goalType: { type: Type.STRING }, target: { type: Type.NUMBER }, year: { type: Type.STRING } }, required: ["title", "description", "metric", "goalType", "target", "year"] } } }, required: ["suggestions"] }
             }
         });
-        // Fixed: Accessing .text property directly.
         const text = response.text?.trim();
         if (!text) {
           return [];
@@ -261,13 +377,11 @@ export const generateCreativeGoalTitle = async (metric: string, goalType: GoalTy
     `;
 
     try {
-        // Fixed: Using gemini-3-flash-preview.
         const response: GenerateContentResponse = await aiInstance.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: prompt,
             config: { temperature: 0.9 }
         });
-        // Fixed: Accessing .text property directly.
         return response.text?.trim().replace(/["']/g, '') || `Meta: ${target} ${metric}`;
     } catch (error) {
         console.error("Gemini API call for creative goal title failed:", error);
@@ -298,7 +412,6 @@ export const generateAchievementSuggestions = async (matches: Match[], existingA
   `;
 
   try {
-    // Fixed: Using gemini-3-flash-preview.
     const response: GenerateContentResponse = await aiInstance.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: prompt,
@@ -334,7 +447,6 @@ export const generateAchievementSuggestions = async (matches: Match[], existingA
             }
         }
     });
-    // Fixed: Accessing .text property directly.
     const text = response.text?.trim();
     if (!text) {
       return [];
@@ -364,7 +476,6 @@ export const generateMatchHeadline = async (match: Match): Promise<string> => {
   `;
 
   try {
-    // Fixed: Using gemini-3-flash-preview.
     const response: GenerateContentResponse = await aiInstance.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -373,7 +484,6 @@ export const generateMatchHeadline = async (match: Match): Promise<string> => {
       }
     });
     
-    // Fixed: Accessing .text property directly.
     return response.text?.trim().replace(/["']/g, '') || "";
 
   } catch (error) {
@@ -407,7 +517,6 @@ export const analyzeAndRespondToFeedback = async (feedbackType: string, feedback
     `;
 
     try {
-        // Fixed: Using gemini-3-flash-preview.
         const response: GenerateContentResponse = await aiInstance.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: prompt,
@@ -424,7 +533,6 @@ export const analyzeAndRespondToFeedback = async (feedbackType: string, feedback
                 }
             }
         });
-        // Fixed: Accessing .text property directly.
         const text = response.text?.trim();
         if (!text) {
           throw new Error("Empty response from AI for feedback analysis.");
@@ -446,7 +554,6 @@ export const startChatSession = (matches: Match[]): Chat | null => {
     `- ${m.date}: ${m.result}, Goles: ${m.myGoals}, Asist.: ${m.myAssists}${m.notes ? `, Notas: ${m.notes}` : ''}`
   ).join('\n');
 
-  // Fixed: Using gemini-3-flash-preview for chat session.
   const chat = aiInstance.chats.create({
     model: 'gemini-3-flash-preview',
     config: {

@@ -1,6 +1,8 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { ThreeDotsIcon } from '../icons/ThreeDotsIcon';
+import { ShareIcon } from '../icons/ShareIcon';
 
 interface MomentPreviewCardProps {
   title: string;
@@ -12,7 +14,15 @@ interface MomentPreviewCardProps {
 const MomentPreviewCard: React.FC<MomentPreviewCardProps> = ({ title, icon, date, onOpen }) => {
   const { theme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth >= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -34,8 +44,11 @@ const MomentPreviewCard: React.FC<MomentPreviewCardProps> = ({ title, icon, date
       gridTemplateColumns: 'auto 1fr auto',
       alignItems: 'center',
       gap: theme.spacing.medium,
-      transition: 'background-color 0.2s',
-      boxShadow: theme.shadows.small,
+      transition: 'background-color 0.2s, transform 0.2s, box-shadow 0.2s',
+      boxShadow: isHovered ? theme.shadows.medium : theme.shadows.small,
+      cursor: 'pointer',
+      position: 'relative',
+      transform: isHovered && isDesktop ? 'translateY(-2px)' : 'none',
     },
     icon: {
       color: theme.colors.accent1,
@@ -63,15 +76,38 @@ const MomentPreviewCard: React.FC<MomentPreviewCardProps> = ({ title, icon, date
       fontSize: theme.typography.fontSize.small,
       color: theme.colors.secondaryText,
     },
-    menuContainer: { position: 'relative' },
+    actionContainer: {
+        position: 'relative',
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+    },
     menuButton: {
       background: 'none',
       border: 'none',
       cursor: 'pointer',
       color: theme.colors.secondaryText,
-      padding: '0.25rem',
+      padding: '0.5rem',
       display: 'flex',
       borderRadius: '50%',
+      transition: 'background-color 0.2s',
+    },
+    shareBtn: {
+        opacity: isHovered ? 1 : 0,
+        transform: isHovered ? 'translateX(0)' : 'translateX(10px)',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        backgroundColor: theme.colors.accent1,
+        color: theme.colors.textOnAccent,
+        border: 'none',
+        padding: '0.5rem 1rem',
+        borderRadius: '20px',
+        fontWeight: 600,
+        fontSize: '0.8rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.5rem',
+        cursor: 'pointer',
+        boxShadow: theme.shadows.small,
     },
     dropdownMenu: {
       position: 'absolute',
@@ -104,41 +140,56 @@ const MomentPreviewCard: React.FC<MomentPreviewCardProps> = ({ title, icon, date
     setIsMenuOpen(prev => !prev);
   };
 
-  const handleAction = () => {
+  const handleAction = (e: React.MouseEvent) => {
+    e.stopPropagation();
     onOpen();
     setIsMenuOpen(false);
   };
   
-  const handleMouseEnter = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleMouseEnterMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.currentTarget.style.backgroundColor = theme.colors.border;
   };
 
-  const handleMouseLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleMouseLeaveMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.currentTarget.style.backgroundColor = 'transparent';
   };
 
   return (
-    <div style={styles.card}>
+    <div 
+        style={styles.card} 
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onClick={onOpen}
+    >
       <div style={styles.icon}>{icon}</div>
       <div style={styles.textContainer}>
         <h3 style={styles.title}>{title}</h3>
         <span style={styles.date}>{date}</span>
       </div>
-      <div style={styles.menuContainer} ref={menuRef}>
-        <button onClick={handleMenuToggle} style={styles.menuButton} aria-label="Abrir menú de momento">
-          <ThreeDotsIcon />
-        </button>
-        {isMenuOpen && (
-          <div style={styles.dropdownMenu}>
-            <button
-              onClick={handleAction}
-              style={styles.dropdownItem}
-              onMouseEnter={handleMouseEnter}
-              onMouseLeave={handleMouseLeave}
-            >
-              Ver y Compartir
+      
+      <div style={styles.actionContainer} ref={menuRef} onClick={(e) => e.stopPropagation()}>
+        {isDesktop ? (
+            <button style={styles.shareBtn} onClick={handleAction}>
+                <ShareIcon size={16} /> Compartir
             </button>
-          </div>
+        ) : (
+            <>
+                <button onClick={handleMenuToggle} style={styles.menuButton} aria-label="Opciones">
+                    <ThreeDotsIcon />
+                </button>
+                {isMenuOpen && (
+                <div style={styles.dropdownMenu}>
+                    <button
+                    onClick={handleAction}
+                    style={styles.dropdownItem}
+                    onMouseEnter={handleMouseEnterMenu}
+                    onMouseLeave={handleMouseLeaveMenu}
+                    >
+                    Ver y Compartir
+                    </button>
+                </div>
+                )}
+            </>
         )}
       </div>
     </div>

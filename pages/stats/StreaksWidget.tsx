@@ -2,8 +2,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useData } from '../../contexts/DataContext';
-import { MoraleLevel, type Match, type HistoricalRecords, type PlayerMorale, type FeaturedInsight } from '../../types';
-import { calculateHistoricalRecords, calculatePlayerMorale, parseLocalDate, generateFeaturedInsights } from '../../utils/analytics';
+import { MoraleLevel, type Match, type HistoricalRecords, type PlayerMorale, type FeaturedInsight, type SeasonRating } from '../../types';
+import { calculateHistoricalRecords, calculatePlayerMorale, calculateAveragePerformance, parseLocalDate, generateFeaturedInsights, calculateSeasonRating } from '../../utils/analytics';
 import Card from '../../components/common/Card';
 import StatCard from '../../components/StatCard';
 import RecentForm from '../../components/RecentForm';
@@ -11,16 +11,17 @@ import { Loader } from '../../components/Loader';
 import YearFilter from '../../components/YearFilter';
 import { TrendingUpIcon } from '../../components/icons/TrendingUpIcon';
 import { ChartLineDownIcon } from '../../components/icons/ChartLineDownIcon';
+import { TrophyIcon } from '../../components/icons/TrophyIcon';
 
 interface StreaksWidgetProps {
   matches: Match[];
 }
 
-const MoraleDisplay: React.FC<{ morale: PlayerMorale | null, isLoading: boolean }> = ({ morale, isLoading }) => {
+const MoraleDisplay: React.FC<{ morale: PlayerMorale | null, isLoading: boolean, isAverage?: boolean }> = ({ morale, isLoading, isAverage }) => {
     const { theme } = useTheme();
 
     if (isLoading) {
-        return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', color: theme.colors.secondaryText, padding: theme.spacing.large }}><Loader /> <p>Calculando moral...</p></div>;
+        return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', color: theme.colors.secondaryText, padding: theme.spacing.large }}><Loader /> <p>Calculando...</p></div>;
     }
 
     if (!morale) {
@@ -41,7 +42,7 @@ const MoraleDisplay: React.FC<{ morale: PlayerMorale | null, isLoading: boolean 
     }[morale.level];
 
     const trendIcon = useMemo(() => {
-      if (!morale) return null;
+      if (!morale || isAverage) return null; // No trend icon for averages
       switch (morale.trend) {
         case 'up':
           return <TrendingUpIcon color={theme.colors.win} size={24} />;
@@ -50,7 +51,7 @@ const MoraleDisplay: React.FC<{ morale: PlayerMorale | null, isLoading: boolean 
         default:
           return null;
       }
-    }, [morale, theme.colors]);
+    }, [morale, theme.colors, isAverage]);
 
 
     const styles: { [key: string]: React.CSSProperties } = {
@@ -144,61 +145,178 @@ const MoraleDisplay: React.FC<{ morale: PlayerMorale | null, isLoading: boolean 
                     <div style={styles.markerArrow}></div>
                 </div>
             </div>
-            <p style={styles.description}>"{morale.description}"</p>
+            <p style={styles.description}>{isAverage ? "Rendimiento promedio de la temporada." : `"${morale.description}"`}</p>
         </div>
     );
 };
 
+const SeasonRatingDisplay: React.FC<{ rating: SeasonRating, year: string }> = ({ rating, year }) => {
+    const { theme } = useTheme();
+
+    const getGradient = (tier: string) => {
+        if (tier.includes('GOAT')) return 'linear-gradient(135deg, #d4af37, #f9e587, #aa8524)';
+        if (tier.includes('The Best')) return `linear-gradient(135deg, ${theme.colors.accent1}, ${theme.colors.win})`;
+        if (tier.includes('Clase Mundial')) return `linear-gradient(135deg, ${theme.colors.accent2}, #5C6BC0)`;
+        return `linear-gradient(135deg, ${theme.colors.surface}, ${theme.colors.background})`;
+    };
+
+    const isTopTier = rating.tierName.includes('GOAT') || rating.tierName.includes('The Best') || rating.tierName.includes('Clase Mundial');
+    const bg = isTopTier ? getGradient(rating.tierName) : theme.colors.background;
+    const textColor = isTopTier ? '#1a1a1a' : theme.colors.primaryText;
+    const borderColor = isTopTier ? 'transparent' : theme.colors.border;
+
+    const styles: { [key: string]: React.CSSProperties } = {
+        card: {
+            background: bg,
+            borderRadius: theme.borderRadius.large,
+            padding: theme.spacing.large,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+            border: `1px solid ${borderColor}`,
+            boxShadow: theme.shadows.medium,
+            color: textColor
+        },
+        badge: {
+            backgroundColor: isTopTier ? 'rgba(255,255,255,0.3)' : theme.colors.surface,
+            padding: '4px 12px',
+            borderRadius: '20px',
+            fontSize: '0.8rem',
+            fontWeight: 700,
+            marginBottom: '10px',
+            display: 'inline-block'
+        },
+        tierTitle: {
+            fontSize: '1.8rem',
+            fontWeight: 900,
+            margin: '0 0 5px 0',
+            textTransform: 'uppercase',
+            letterSpacing: '-0.5px'
+        },
+        score: {
+            fontSize: '3rem',
+            fontWeight: 900,
+            lineHeight: 1,
+            margin: '10px 0',
+            opacity: 0.9
+        },
+        label: {
+            fontSize: '0.8rem',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            opacity: 0.7
+        },
+        efficiency: {
+            fontSize: '0.75rem',
+            fontWeight: 500,
+            opacity: 0.7,
+            marginTop: '4px'
+        }
+    };
+
+    return (
+        <div style={styles.card}>
+            <div style={styles.badge}>RESUMEN {year}</div>
+            <h3 style={styles.tierTitle}>{rating.tierName}</h3>
+            <p style={{margin: 0, fontSize: '0.95rem', opacity: 0.8}}>{rating.description}</p>
+            
+            <div style={styles.score}>
+                {rating.score}
+            </div>
+            <div style={styles.label}>Puntos de Temporada</div>
+            {rating.efficiency !== undefined && (
+                <div style={styles.efficiency}>
+                    Factor de efectividad: {rating.efficiency}%
+                </div>
+            )}
+        </div>
+    );
+};
 
 const StreaksWidget: React.FC<StreaksWidgetProps> = ({ matches }) => {
   const { theme } = useTheme();
+  // removed favoriteTeam usage
   const { playerProfile } = useData();
 
   const [morale, setMorale] = useState<PlayerMorale | null>(null);
+  const [seasonRating, setSeasonRating] = useState<SeasonRating | null>(null);
   const [isMoraleLoading, setIsMoraleLoading] = useState(true);
   const [moraleError, setMoraleError] = useState<string | null>(null);
 
-  const availableYears = useMemo(() => {
-    const yearSet = new Set(matches.map(m => parseLocalDate(m.date).getFullYear()));
-    return Array.from(yearSet).sort((a, b) => Number(b) - Number(a));
+  // 1. All Matches Sorted (Newest First) - Base for everything
+  const allSortedMatches = useMemo(() => {
+    return [...matches].sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime());
   }, [matches]);
+
+  const availableYears = useMemo(() => {
+    const yearSet = new Set(allSortedMatches.map(m => parseLocalDate(m.date).getFullYear()));
+    return Array.from(yearSet).sort((a, b) => Number(b) - Number(a));
+  }, [allSortedMatches]);
  
   const [selectedYear, setSelectedYear] = useState<string | 'all'>(availableYears.length > 0 ? availableYears[0].toString() : 'all');
 
   const currentFullYear = new Date().getFullYear();
   const showCurrentStreaks = selectedYear === 'all' || selectedYear === currentFullYear.toString();
 
+  // 2. Filtered Matches (Strictly for the selected year)
+  // Used for: "Libro de Récords", "Season Rating"
   const filteredMatches = useMemo(() => {
-    if (selectedYear === 'all') return matches;
-    return matches.filter(m => parseLocalDate(m.date).getFullYear().toString() === selectedYear);
-  }, [matches, selectedYear]);
+    if (selectedYear === 'all') return allSortedMatches;
+    return allSortedMatches.filter(m => parseLocalDate(m.date).getFullYear().toString() === selectedYear);
+  }, [allSortedMatches, selectedYear]);
   
+  // 3. Contextual Matches (History up to the end of selected year)
+  // Used for: "Active Streaks" (Ongoing streak at that point in time) AND "Current Morale" (Snapshot at that time)
+  const matchesForStreaks = useMemo(() => {
+      if (selectedYear === 'all') return allSortedMatches;
+      const targetYear = parseInt(selectedYear);
+      // Include all matches from the selected year AND older years.
+      return allSortedMatches.filter(m => parseLocalDate(m.date).getFullYear() <= targetYear);
+  }, [allSortedMatches, selectedYear]);
+
+  // 4. Comparison Data (Previous Year Records)
+  const previousYearMatches = useMemo(() => {
+      if (selectedYear === 'all') return [];
+      const prevYear = parseInt(selectedYear) - 1;
+      return allSortedMatches.filter(m => parseLocalDate(m.date).getFullYear() === prevYear);
+  }, [allSortedMatches, selectedYear]);
+
+  const previousHistoricalRecords = useMemo(() => {
+      if (previousYearMatches.length === 0) return null;
+      return calculateHistoricalRecords(previousYearMatches);
+  }, [previousYearMatches]);
+
   useEffect(() => {
-    const fetchMorale = () => {
+    const fetchStats = () => {
         setIsMoraleLoading(true);
         setMoraleError(null);
         setMorale(null);
+        setSeasonRating(null);
 
-        const moraleData = calculatePlayerMorale(filteredMatches);
-        
-        if (!moraleData) {
-            setIsMoraleLoading(false);
-            return;
+        if (showCurrentStreaks) {
+            // For current year or all time, we show the "Current Mood" (Last 5 matches)
+            const moraleData = calculatePlayerMorale(matchesForStreaks);
+            setMorale(moraleData);
+        } else {
+            // For past years, we show the "Season Rating" based on the full year performance
+            const rating = calculateSeasonRating(filteredMatches);
+            setSeasonRating(rating);
         }
         
-        setMorale(moraleData);
         setIsMoraleLoading(false);
     };
     
-    fetchMorale();
-  }, [filteredMatches]);
+    fetchStats();
+  }, [matchesForStreaks, filteredMatches, showCurrentStreaks, selectedYear]);
 
   const featuredInsights = useMemo(() => {
       return generateFeaturedInsights(filteredMatches, playerProfile);
   }, [filteredMatches, playerProfile]);
 
+  // Use matchesForStreaks here to allow streaks to cross year boundaries
   const { activeStreaks, last5MatchesStats, currentStreaks } = useMemo(() => {
-    const sortedMatches = [...filteredMatches].sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime());
+    const sortedMatches = matchesForStreaks; // Already sorted Newest -> Oldest
 
     const last5 = sortedMatches.slice(0, 5);
     let last5Stats = null;
@@ -254,11 +372,21 @@ const StreaksWidget: React.FC<StreaksWidgetProps> = ({ matches }) => {
         currentStreaks: { win: winStreak, undefeated: undefeatedStreak, loss: lossStreak, winless: winlessStreak, goal: goalStreak, assist: assistStreak, goalDrought: goalDrought, assistDrought: assistDrought }
     };
 
-  }, [filteredMatches]);
+  }, [matchesForStreaks]);
 
+  // Historical Records use filteredMatches (Strictly within the year)
   const historicalRecords: HistoricalRecords = useMemo(() => 
     calculateHistoricalRecords(filteredMatches), 
   [filteredMatches]);
+
+  const getRecordTrend = (key: keyof HistoricalRecords) => {
+      if (!previousHistoricalRecords) return undefined;
+      const currentVal = historicalRecords[key].value;
+      const prevVal = previousHistoricalRecords[key].value;
+      if (currentVal > prevVal) return 'up';
+      if (currentVal < prevVal) return 'down';
+      return 'neutral';
+  }
 
   const styles: { [key: string]: React.CSSProperties } = {
     container: { display: 'flex', flexDirection: 'column', gap: theme.spacing.large },
@@ -344,21 +472,26 @@ const StreaksWidget: React.FC<StreaksWidgetProps> = ({ matches }) => {
             <YearFilter years={availableYears} selectedYear={selectedYear} onSelectYear={setSelectedYear} size="small" allTimeLabel="General" />
         </div>
 
-        <div>
-            <h4 style={styles.sectionTitle}>Estado de ánimo</h4>
-            <MoraleDisplay morale={morale} isLoading={isMoraleLoading} />
-            {moraleError && <p style={{color: theme.colors.loss, fontSize: '0.8rem', textAlign: 'center'}}>{moraleError}</p>}
-        </div>
+        {selectedYear !== 'all' && (
+            <div>
+                <h4 style={styles.sectionTitle}>{showCurrentStreaks ? 'Estado de ánimo actual' : 'Nivel de la Temporada'}</h4>
+                {showCurrentStreaks ? (
+                    <MoraleDisplay morale={morale} isLoading={isMoraleLoading} />
+                ) : (
+                    seasonRating && <SeasonRatingDisplay rating={seasonRating} year={selectedYear} />
+                )}
+                {moraleError && <p style={{color: theme.colors.loss, fontSize: '0.8rem', textAlign: 'center'}}>{moraleError}</p>}
+            </div>
+        )}
 
-        {showCurrentStreaks && (
-          <div>
-            <h4 style={styles.sectionTitle}>Rachas activas</h4>
+        {/* Always show active streaks, but label changes if past year */}
+        <div>
+            <h4 style={styles.sectionTitle}>{showCurrentStreaks ? 'Rachas activas' : `Rachas activas al cierre de ${selectedYear}`}</h4>
             {renderCurrentStreaks()}
             <div style={{marginTop: theme.spacing.large}}>
-              <RecentForm matches={filteredMatches} />
+              <RecentForm matches={matchesForStreaks} />
             </div>
-          </div>
-        )}
+        </div>
 
         {featuredInsights.length > 0 && (
           <div>
@@ -380,16 +513,78 @@ const StreaksWidget: React.FC<StreaksWidgetProps> = ({ matches }) => {
         <div>
           <h4 style={styles.sectionTitle}>Libro de récords ({selectedYear === 'all' ? 'Históricos' : selectedYear})</h4>
           <div style={styles.recordsGrid}>
-            <StatCard label="📈 Victorias seguidas" value={historicalRecords.longestWinStreak.value} count={historicalRecords.longestWinStreak.count} isOngoing={showCurrentStreaks && currentStreaks.win >= historicalRecords.longestWinStreak.value && historicalRecords.longestWinStreak.value > 0} />
-            <StatCard label="🧤 Partidos invicto" value={historicalRecords.longestUndefeatedStreak.value} count={historicalRecords.longestUndefeatedStreak.count} isOngoing={showCurrentStreaks && currentStreaks.undefeated >= historicalRecords.longestUndefeatedStreak.value && historicalRecords.longestUndefeatedStreak.value > 0} />
-            <StatCard label="📉 Derrotas seguidas" value={historicalRecords.longestLossStreak.value} count={historicalRecords.longestLossStreak.count} isOngoing={showCurrentStreaks && currentStreaks.loss >= historicalRecords.longestLossStreak.value && historicalRecords.longestLossStreak.value > 0} />
-            <StatCard label="❌ Partidos sin ganar" value={historicalRecords.longestWinlessStreak.value} count={historicalRecords.longestWinlessStreak.count} isOngoing={showCurrentStreaks && currentStreaks.winless >= historicalRecords.longestWinlessStreak.value && historicalRecords.longestWinlessStreak.value > 0} />
-            <StatCard label="🔥 Partidos marcando" value={historicalRecords.longestGoalStreak.value} count={historicalRecords.longestGoalStreak.count} isOngoing={showCurrentStreaks && currentStreaks.goal >= historicalRecords.longestGoalStreak.value && historicalRecords.longestGoalStreak.value > 0} />
-            <StatCard label="💫 Partidos asistiendo" value={historicalRecords.longestAssistStreak.value} count={historicalRecords.longestAssistStreak.count} isOngoing={showCurrentStreaks && currentStreaks.assist >= historicalRecords.longestAssistStreak.value && historicalRecords.longestAssistStreak.value > 0} />
-            <StatCard label="❄️ Sequía de goles" value={historicalRecords.longestGoalDrought.value} count={historicalRecords.longestGoalDrought.count} isOngoing={showCurrentStreaks && currentStreaks.goalDrought >= historicalRecords.longestGoalDrought.value && historicalRecords.longestGoalDrought.value > 0} />
-            <StatCard label="💨 Sequía de asist." value={historicalRecords.longestAssistDrought.value} count={historicalRecords.longestAssistDrought.count} isOngoing={showCurrentStreaks && currentStreaks.assistDrought >= historicalRecords.longestAssistDrought.value && historicalRecords.longestAssistDrought.value > 0} />
-            <StatCard label="🔝 Goles en 1 partido" value={historicalRecords.bestGoalPerformance.value} count={historicalRecords.bestGoalPerformance.count} />
-            <StatCard label="☝🏻 Asist. en 1 partido" value={historicalRecords.bestAssistPerformance.value} count={historicalRecords.bestAssistPerformance.count} />
+            <StatCard 
+                label="📈 Victorias seguidas" 
+                value={historicalRecords.longestWinStreak.value} 
+                count={historicalRecords.longestWinStreak.count} 
+                isOngoing={currentStreaks.win >= historicalRecords.longestWinStreak.value && historicalRecords.longestWinStreak.value > 0} 
+                trend={getRecordTrend('longestWinStreak')}
+            />
+            <StatCard 
+                label="🧤 Partidos invicto" 
+                value={historicalRecords.longestUndefeatedStreak.value} 
+                count={historicalRecords.longestUndefeatedStreak.count} 
+                isOngoing={currentStreaks.undefeated >= historicalRecords.longestUndefeatedStreak.value && historicalRecords.longestUndefeatedStreak.value > 0} 
+                trend={getRecordTrend('longestUndefeatedStreak')}
+            />
+            <StatCard 
+                label="📉 Derrotas seguidas" 
+                value={historicalRecords.longestLossStreak.value} 
+                count={historicalRecords.longestLossStreak.count} 
+                isOngoing={currentStreaks.loss >= historicalRecords.longestLossStreak.value && historicalRecords.longestLossStreak.value > 0} 
+                trend={getRecordTrend('longestLossStreak')}
+                reverseTrendColor={true} // Up is Bad
+            />
+            <StatCard 
+                label="❌ Partidos sin ganar" 
+                value={historicalRecords.longestWinlessStreak.value} 
+                count={historicalRecords.longestWinlessStreak.count} 
+                isOngoing={currentStreaks.winless >= historicalRecords.longestWinlessStreak.value && historicalRecords.longestWinlessStreak.value > 0} 
+                trend={getRecordTrend('longestWinlessStreak')}
+                reverseTrendColor={true} // Up is Bad
+            />
+            <StatCard 
+                label="🔥 Partidos marcando" 
+                value={historicalRecords.longestGoalStreak.value} 
+                count={historicalRecords.longestGoalStreak.count} 
+                isOngoing={currentStreaks.goal >= historicalRecords.longestGoalStreak.value && historicalRecords.longestGoalStreak.value > 0} 
+                trend={getRecordTrend('longestGoalStreak')}
+            />
+            <StatCard 
+                label="💫 Partidos asistiendo" 
+                value={historicalRecords.longestAssistStreak.value} 
+                count={historicalRecords.longestAssistStreak.count} 
+                isOngoing={currentStreaks.assist >= historicalRecords.longestAssistStreak.value && historicalRecords.longestAssistStreak.value > 0} 
+                trend={getRecordTrend('longestAssistStreak')}
+            />
+            <StatCard 
+                label="❄️ Sequía de goles" 
+                value={historicalRecords.longestGoalDrought.value} 
+                count={historicalRecords.longestGoalDrought.count} 
+                isOngoing={currentStreaks.goalDrought >= historicalRecords.longestGoalDrought.value && historicalRecords.longestGoalDrought.value > 0} 
+                trend={getRecordTrend('longestGoalDrought')}
+                reverseTrendColor={true} // Up is Bad
+            />
+            <StatCard 
+                label="💨 Sequía de asist." 
+                value={historicalRecords.longestAssistDrought.value} 
+                count={historicalRecords.longestAssistDrought.count} 
+                isOngoing={currentStreaks.assistDrought >= historicalRecords.longestAssistDrought.value && historicalRecords.longestAssistDrought.value > 0} 
+                trend={getRecordTrend('longestAssistDrought')}
+                reverseTrendColor={true} // Up is Bad
+            />
+            <StatCard 
+                label="🔝 Goles en 1 partido" 
+                value={historicalRecords.bestGoalPerformance.value} 
+                count={historicalRecords.bestGoalPerformance.count} 
+                trend={getRecordTrend('bestGoalPerformance')}
+            />
+            <StatCard 
+                label="☝🏻 Asist. en 1 partido" 
+                value={historicalRecords.bestAssistPerformance.value} 
+                count={historicalRecords.bestAssistPerformance.count} 
+                trend={getRecordTrend('bestAssistPerformance')}
+            />
           </div>
         </div>
       </div>

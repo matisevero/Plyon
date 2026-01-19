@@ -1,7 +1,7 @@
 
 import React from 'react';
 
-export type Page = 'recorder' | 'stats' | 'table' | 'duels' | 'progress' | 'social' | 'coach' | 'worldcup' | 'settings';
+export type Page = 'landing' | 'recorder' | 'stats' | 'table' | 'duels' | 'progress' | 'social' | 'coach' | 'worldcup' | 'settings' | 'admin' | 'season_recap';
 
 export type MatchResult = 'VICTORIA' | 'EMPATE' | 'DERROTA';
 
@@ -21,8 +21,31 @@ export interface Match {
   notes?: string;
   tournament?: string;
   matchMode?: 'regular' | 'world-cup' | 'qualifiers';
+  earnedPoints?: number; 
   myTeamPlayers?: PlayerPerformance[];
   opponentPlayers?: PlayerPerformance[];
+  verified?: boolean;
+}
+
+export interface SocialActivity {
+    id: string;
+    userId: string;
+    userName: string;
+    userPhoto?: string;
+    type: 'match' | 'achievement' | 'campaign_milestone' | 'streak' | 'post';
+    title: string;
+    description: string;
+    timestamp: string;
+    metadata?: {
+        image?: string;
+        videoUrl?: string;
+        location?: string;
+        mood?: string; // e.g., 'training', 'matchday', 'injured'
+        moodIcon?: string;
+        likes?: string[];
+        reactions?: Record<string, string[]>; // Map emoji -> array of userIds
+        comments?: number;
+    };
 }
 
 export type MatchSortByType = 'date_desc' | 'date_asc' | 'goals_desc' | 'goals_asc' | 'assists_desc' | 'assists_asc';
@@ -135,7 +158,7 @@ export interface AIAchievementSuggestion {
 
 export interface AIInteraction {
   id: string;
-  type: 'match_summary' | 'highlight_analysis' | 'coach_insight' | 'consistency_analysis' | 'goal_suggestion' | 'achievement_suggestion' | 'match_headline' | 'player_comparison';
+  type: 'match_summary' | 'highlight_analysis' | 'coach_insight' | 'consistency_analysis' | 'goal_suggestion' | 'achievement_suggestion' | 'match_headline' | 'player_comparison' | 'feedback';
   date: string;
   content: any;
 }
@@ -213,20 +236,36 @@ export interface PlayerMorale {
   trendStreak: number;
 }
 
+export interface SeasonRating {
+    tierName: string;
+    description: string;
+    score: number;
+    efficiency: number;
+}
+
 export interface PublicProfile {
     uid: string;
     name: string;
+    username?: string;
     photo?: string;
     level?: number;
+    careerPoints?: number;
+    favoriteTeam?: string;
+    friends?: string[];
+    reputation?: {
+        totalValidations: number;
+        perfectValidations: number; // Accepted without edits
+    };
 }
 
 export interface Notification {
     id: string;
     date: string;
     message: string;
-    type: string;
+    type: string; 
     read: boolean;
     result?: string;
+    metadata?: any;
 }
 
 export interface ChatMessage {
@@ -235,6 +274,7 @@ export interface ChatMessage {
     text: string;
     timestamp: string;
     read: boolean;
+    participants?: string[];
 }
 
 export type WorldCupStage = 'group' | 'round_of_16' | 'quarter_finals' | 'semi_finals' | 'final';
@@ -247,6 +287,7 @@ export interface WorldCupCampaignHistory {
     startDate: string;
     endDate: string;
     results: MatchResult[];
+    isQualified?: boolean; 
 }
 
 export interface QualifiersCampaignHistory {
@@ -268,6 +309,7 @@ export interface WorldCupProgress {
     completedStages: WorldCupStage[];
     matchesByStage: Record<string, Match[]>;
     championOfCampaign?: boolean;
+    isQualified?: boolean; 
 }
 
 export interface QualifiersProgress {
@@ -284,8 +326,19 @@ export interface QualifiersProgress {
     startDate?: string;
 }
 
+// Optimized structure for scalability
+export interface AggregatedStats {
+    totalMatches: number;
+    wins: number;
+    draws: number;
+    losses: number;
+    goalsFor: number; // My Goals
+    assists: number;
+}
+
 export interface PlayerProfileData {
   name: string;
+  username?: string;
   photo?: string;
   dob?: string;
   weight?: number;
@@ -293,6 +346,8 @@ export interface PlayerProfileData {
   favoriteTeam?: string;
   email?: string;
   friends?: string[];
+  blockedUsers?: string[]; // New: Blocked users list
+  playerMappings?: Record<string, string>; 
   friendRequestsSent?: string[];
   friendRequestsReceived?: string[];
   careerPoints?: number;
@@ -304,6 +359,11 @@ export interface PlayerProfileData {
   qualifiersHistory?: QualifiersCampaignHistory[];
   lastFreeWorldCupDate?: string;
   worldCupAttempts?: number;
+  stats?: AggregatedStats; // New aggregated stats
+  reputation?: {
+      totalValidations: number;
+      perfectValidations: number;
+  };
 }
 
 export interface TutorialStep {
@@ -316,4 +376,52 @@ export interface FeaturedInsight {
     icon: string;
     title: string;
     description: string;
+}
+
+export interface FriendRequest {
+    id: string;
+    from: string;
+    to: string;
+    status: 'pending' | 'accepted' | 'rejected';
+    createdAt: string;
+    fromName: string;
+    senderProfile?: PublicProfile;
+}
+
+export interface RankingUser extends PublicProfile {
+    position: number;
+    stats: {
+        totalMatches: number;
+        totalPoints: number;
+        winRate: number;
+    }
+}
+
+export interface Invitation {
+    code: string;
+    createdBy: string;
+    createdAt: string;
+    expiresAt: string;
+    usedBy: string[];
+}
+
+export interface PendingMatch {
+    id: string;
+    fromUserId: string;
+    fromUserName: string;
+    toUserId: string;
+    matchData: Match;
+    role: 'teammate' | 'opponent';
+    status: 'pending' | 'accepted' | 'rejected';
+    createdAt: string;
+}
+
+export interface UserReport {
+    id: string;
+    reporterId: string;
+    reportedUserId: string;
+    reason: string;
+    comments?: string;
+    createdAt: string;
+    status: 'pending' | 'reviewed';
 }

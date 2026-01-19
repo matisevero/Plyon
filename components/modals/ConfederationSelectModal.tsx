@@ -1,16 +1,87 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { CloseIcon } from '../icons/CloseIcon';
 import { CONFEDERATIONS } from '../../utils/analytics';
 import type { ConfederationName } from '../../types';
+import { GlobeIcon } from '../icons/GlobeIcon';
 
 interface ConfederationSelectModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (confederation: ConfederationName) => void;
 }
+
+// Sub-component for individual cards to handle their own image error state
+const ConfederationCard: React.FC<{
+    confKey: string;
+    conf: any;
+    onSelect: (key: ConfederationName) => void;
+    theme: any;
+    getDifficultyColor: (multiplier: number) => string;
+}> = ({ confKey, conf, onSelect, theme, getDifficultyColor }) => {
+    const [imgError, setImgError] = useState(false);
+
+    // Construct the expected URL based on theme
+    const imageUrl = conf.logo[theme.name];
+
+    // Reset error when URL changes (e.g. theme toggle)
+    useEffect(() => {
+        setImgError(false);
+    }, [imageUrl]);
+
+    const styles: React.CSSProperties = {
+        backgroundColor: theme.colors.background,
+        borderRadius: theme.borderRadius.medium,
+        border: `1px solid ${theme.colors.border}`,
+        padding: theme.spacing.medium,
+        display: 'flex',
+        alignItems: 'center',
+        gap: theme.spacing.medium,
+        cursor: 'pointer',
+        transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s',
+        position: 'relative' as 'relative',
+    };
+
+    // Increased size for better visibility
+    const logoStyle: React.CSSProperties = {
+        width: '50px',
+        height: '50px',
+        objectFit: 'contain',
+        flexShrink: 0,
+    };
+
+    return (
+        <div
+            style={styles}
+            onClick={() => onSelect(confKey as ConfederationName)}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = theme.colors.accent1 }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = theme.colors.border }}
+        >
+            {imageUrl && !imgError ? (
+                <img 
+                    src={imageUrl} 
+                    alt={`${conf.name} logo`} 
+                    style={logoStyle} 
+                    onError={() => setImgError(true)}
+                />
+            ) : (
+                <GlobeIcon size={50} color={theme.colors.primaryText} />
+            )}
+            
+            <div style={{ textAlign: 'left', flex: 1 }}>
+                <h3 style={{ fontWeight: 700, color: theme.colors.primaryText, fontSize: theme.typography.fontSize.medium, margin: 0 }}>{conf.name}</h3>
+                <p style={{ fontSize: theme.typography.fontSize.small, color: theme.colors.secondaryText, margin: `0.1rem 0 0 0` }}>
+                    {conf.slots} Cupos Directos {conf.playoffSlots > 0 && `+ ${conf.playoffSlots} Repechaje`}
+                </p>
+            </div>
+            <div style={{ fontSize: '0.7rem', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', color: theme.colors.textOnAccent, marginLeft: 'auto', alignSelf: 'flex-start', backgroundColor: getDifficultyColor(conf.pointsMultiplier || 1) }}>
+                {conf.difficulty || 'Normal'}
+            </div>
+        </div>
+    );
+};
 
 const ConfederationSelectModal: React.FC<ConfederationSelectModalProps> = ({ isOpen, onClose, onSelect }) => {
   const { theme } = useTheme();
@@ -47,48 +118,6 @@ const ConfederationSelectModal: React.FC<ConfederationSelectModalProps> = ({ isO
       display: 'flex',
       flexDirection: 'column',
       gap: theme.spacing.small,
-    },
-    card: {
-        backgroundColor: theme.colors.background,
-        borderRadius: theme.borderRadius.medium,
-        border: `1px solid ${theme.colors.border}`,
-        padding: theme.spacing.medium,
-        display: 'flex',
-        alignItems: 'center',
-        gap: theme.spacing.medium,
-        cursor: 'pointer',
-        transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s',
-        position: 'relative',
-    },
-    logo: {
-        width: '40px',
-        height: '40px',
-        objectFit: 'contain',
-        flexShrink: 0,
-    },
-    textContainer: {
-        textAlign: 'left',
-        flex: 1,
-    },
-    confName: {
-        fontWeight: 700,
-        color: theme.colors.primaryText,
-        fontSize: theme.typography.fontSize.medium,
-        margin: 0,
-    },
-    slots: {
-        fontSize: theme.typography.fontSize.small,
-        color: theme.colors.secondaryText,
-        margin: `0.1rem 0 0 0`,
-    },
-    difficultyBadge: {
-        fontSize: '0.7rem',
-        fontWeight: 'bold',
-        padding: '2px 6px',
-        borderRadius: '4px',
-        color: theme.colors.textOnAccent,
-        marginLeft: 'auto',
-        alignSelf: 'flex-start'
     }
   };
 
@@ -124,26 +153,14 @@ const ConfederationSelectModal: React.FC<ConfederationSelectModalProps> = ({ isO
           </header>
           <div style={styles.content}>
             {Object.entries(CONFEDERATIONS).map(([key, conf]) => (
-                <div 
+                <ConfederationCard 
                     key={key} 
-                    style={styles.card} 
-                    onClick={() => onSelect(key as ConfederationName)}
-                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = theme.colors.accent1 }}
-                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = theme.colors.border }}
-                >
-                    <img src={conf.logo[theme.name]} alt={`${conf.name} logo`} style={styles.logo} />
-                    <div style={styles.textContainer}>
-                        <h3 style={styles.confName}>{conf.name}</h3>
-                        <p style={styles.slots}>
-                            {conf.slots} Cupos Directos {conf.playoffSlots > 0 && `+ ${conf.playoffSlots} Repechaje`}
-                        </p>
-                    </div>
-                    {/* @ts-ignore - difficulty and pointsMultiplier were added recently */}
-                    <div style={{...styles.difficultyBadge, backgroundColor: getDifficultyColor(conf.pointsMultiplier || 1)}}>
-                        {/* @ts-ignore */}
-                        {conf.difficulty || 'Normal'}
-                    </div>
-                </div>
+                    confKey={key} 
+                    conf={conf} 
+                    onSelect={onSelect} 
+                    theme={theme}
+                    getDifficultyColor={getDifficultyColor}
+                />
             ))}
           </div>
         </div>

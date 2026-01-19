@@ -25,7 +25,7 @@ import NotificationCenter from './notifications/NotificationCenter';
 
 const Header: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
-  const { currentPage, setCurrentPage, playerProfile, hasUnreadNotifications, markNotificationsAsRead } = useData();
+  const { currentPage, setCurrentPage, playerProfile, hasUnreadNotifications } = useData();
   const { user } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
@@ -59,7 +59,7 @@ const Header: React.FC = () => {
     { page: 'duels', label: 'Duelos', icon: <UsersIcon size={18} /> },
     { page: 'worldcup', label: 'Modo Carrera', icon: <PlayerIcon size={18} /> },
     { page: 'progress', label: 'Progreso', icon: <TrendingUpIcon size={18} /> },
-    { page: 'social', label: 'Social', icon: <ImageIcon size={18} /> },
+    { page: 'social', label: 'Comunidad', icon: <ImageIcon size={18} /> },
     { page: 'coach', label: 'Entrenador IA', icon: <ChatBubbleIcon size={18} /> },
     { page: 'settings', label: 'Configuración', icon: <SettingsIcon size={18} /> },
   ];
@@ -127,16 +127,8 @@ const Header: React.FC = () => {
   };
 
   const handleToggleNotifications = useCallback(() => {
-    setIsNotificationCenterOpen(prev => {
-        const isOpening = !prev;
-        if (isOpening && hasUnreadNotifications) {
-            setTimeout(() => {
-                markNotificationsAsRead();
-            }, 500);
-        }
-        return isOpening;
-    });
-  }, [hasUnreadNotifications, markNotificationsAsRead]);
+    setIsNotificationCenterOpen(prev => !prev);
+  }, []);
   
   const styles: { [key: string]: React.CSSProperties } = {
     header: {
@@ -272,6 +264,7 @@ const Header: React.FC = () => {
                         style={{...styles.navButton, ...buttonStateStyle}} 
                         onClick={() => handleNavClick(page)} 
                         aria-current={isActive}
+                        aria-label={`Ir a ${label}`}
                         onMouseEnter={() => setHoveredButton(page)}
                         onMouseLeave={() => setHoveredButton(null)}
                     >
@@ -289,7 +282,7 @@ const Header: React.FC = () => {
                 <BellIcon size={20} color={theme.colors.primaryText} />
                 {hasUnreadNotifications && <div style={styles.notificationDot} />}
               </button>
-              <button onClick={handleUserClick} style={styles.userButton} aria-label={user ? "Perfil" : "Iniciar sesión"}>
+              <button onClick={handleUserClick} style={styles.userButton} aria-label={user ? "Ver perfil de usuario" : "Iniciar sesión"}>
                 {user && playerProfile.photo ? (
                     <img src={playerProfile.photo} alt="Profile" style={styles.userAvatar} />
                 ) : (
@@ -306,10 +299,10 @@ const Header: React.FC = () => {
           )}
 
 
-          <button onClick={toggleTheme} style={styles.iconButton} aria-label="Cambiar tema">{theme.name === 'dark' ? <SunIcon /> : <MoonIcon />}</button>
+          <button onClick={toggleTheme} style={styles.iconButton} aria-label={`Cambiar a tema ${theme.name === 'dark' ? 'claro' : 'oscuro'}`}>{theme.name === 'dark' ? <SunIcon /> : <MoonIcon />}</button>
           
           {!isDesktop && (
-            <button onClick={handleOpenMenu} style={styles.iconButton} aria-label="Abrir menú"><MenuIcon color={theme.colors.primaryText} /></button>
+            <button onClick={handleOpenMenu} style={styles.iconButton} aria-label="Abrir menú de navegación"><MenuIcon color={theme.colors.primaryText} /></button>
           )}
         </div>
       </header>

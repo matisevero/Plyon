@@ -14,14 +14,13 @@ interface TutorialModalProps {
 const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose, steps }) => {
   const { theme } = useTheme();
   const [currentStep, setCurrentStep] = useState(0);
-  // UX Improvement: Default to true so closing via X or Finish automatically dismisses it forever unless unchecked.
   const [dontShowAgain, setDontShowAgain] = useState(true);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
 
   // Touch swipe state
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchDeltaX, setTouchDeltaX] = useState(0);
-  const touchThreshold = 50; // Minimum swipe distance in pixels
+  const touchThreshold = 50; 
 
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth >= 768);
@@ -32,8 +31,8 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose, steps })
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
-      setCurrentStep(0); // Reset to first step when opened
-      setDontShowAgain(true); // Reset to true every time it opens to ensure good UX on close
+      setCurrentStep(0); 
+      setDontShowAgain(true); 
     } else {
       document.body.style.overflow = 'auto';
     }
@@ -49,7 +48,6 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose, steps })
     };
   }, [isOpen]);
   
-  // Create a stable handleClose that uses the current state of dontShowAgain
   const handleClose = () => {
     onClose(dontShowAgain);
   };
@@ -59,6 +57,8 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose, steps })
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
+    } else {
+      handleFinish();
     }
   };
 
@@ -74,7 +74,7 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose, steps })
   
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStartX(e.touches[0].clientX);
-    setTouchDeltaX(0); // Reset delta on new touch
+    setTouchDeltaX(0); 
   };
   
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -98,145 +98,153 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose, steps })
   const styles: { [key: string]: React.CSSProperties } = {
     backdrop: {
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: 2000,
+      backgroundColor: 'rgba(0, 0, 0, 0.85)', zIndex: 2000,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: theme.spacing.medium, animation: 'fadeIn 0.3s ease',
+      backdropFilter: 'blur(5px)',
     },
     modal: {
       backgroundColor: theme.colors.surface,
-      borderRadius: theme.borderRadius.large,
-      boxShadow: theme.shadows.large,
-      width: isDesktop ? '650px' : '90%',
-      maxWidth: '650px',
-      // Height increased to prevent clipping
-      height: isDesktop ? '380px' : '550px',
-      maxHeight: '90vh',
+      borderRadius: '24px',
+      boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
+      width: isDesktop ? '700px' : '100%', // Full width on mobile with padding
+      maxWidth: '700px',
+      height: isDesktop ? '450px' : 'auto', // Auto height on mobile, but constrained by max-height
+      maxHeight: '85vh', // Crucial: Leave space for browser UI
       display: 'flex',
       flexDirection: 'column',
-      animation: 'scaleUp 0.3s ease',
+      animation: 'scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
       border: `1px solid ${theme.colors.border}`,
-      overflow: 'hidden',
+      overflow: 'hidden', // Contain inner scroll
+      position: 'relative',
     },
-    header: {
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: `${theme.spacing.medium} ${theme.spacing.large}`,
-      borderBottom: `1px solid ${theme.colors.border}`,
-      flexShrink: 0,
+    closeButtonWrapper: {
+        position: 'absolute',
+        top: '1rem',
+        right: '1rem',
+        zIndex: 10,
     },
-    title: { margin: 0, fontSize: theme.typography.fontSize.large, fontWeight: 700, color: theme.colors.primaryText },
     carouselContainer: {
         flex: 1,
         display: 'flex',
         overflow: 'hidden',
         position: 'relative',
+        minHeight: '250px', // Ensure visibility on small screens
     },
     carouselTrack: {
         display: 'flex',
         height: '100%',
         width: '100%',
-        transition: 'transform 0.4s ease-out',
+        transition: 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1)',
         transform: `translateX(-${currentStep * 100}%)`,
     },
     carouselSlide: {
         flex: '0 0 100%',
         height: '100%',
         width: '100%',
-        padding: isDesktop ? '0 3rem' : '0 2rem 2rem 2rem',
-        textAlign: isDesktop ? 'left' : 'center',
+        padding: isDesktop ? '0 4rem' : '2rem 1.5rem 0 1.5rem',
+        textAlign: 'center',
         display: 'flex',
-        flexDirection: isDesktop ? 'row' : 'column',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         boxSizing: 'border-box',
-        gap: isDesktop ? '2rem' : '1.5rem',
-        overflowY: 'auto', // Allow scrolling if content is too long
+        overflowY: 'auto', // Scroll text if too long on tiny screens
     },
-    iconContainer: {
-        height: isDesktop ? 'auto' : '60px',
+    iconCircle: {
+        width: isDesktop ? '100px' : '80px',
+        height: isDesktop ? '100px' : '80px',
+        borderRadius: '50%',
+        backgroundColor: `${theme.colors.accent1}15`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: isDesktop ? 0 : theme.spacing.medium,
+        marginBottom: isDesktop ? '2rem' : '1.5rem',
+        boxShadow: `0 0 30px ${theme.colors.accent1}20`,
         flexShrink: 0,
     },
     icon: {
         color: theme.colors.accent1,
-    },
-    textContainer: {
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        flex: isDesktop ? 1 : 'unset', // Allow text to take width on desktop
+        transform: 'scale(1.2)',
     },
     stepTitle: {
-        margin: `0 0 ${theme.spacing.medium} 0`,
-        fontSize: '1.2rem',
-        fontWeight: 700,
+        margin: '0 0 1rem 0',
+        fontSize: isDesktop ? '1.75rem' : '1.5rem',
+        fontWeight: 800,
         color: theme.colors.primaryText,
+        lineHeight: 1.2,
     },
     stepContent: {
-        fontSize: theme.typography.fontSize.small,
+        fontSize: isDesktop ? '1rem' : '0.95rem',
         color: theme.colors.secondaryText,
         lineHeight: 1.6,
         margin: 0,
+        maxWidth: '450px',
     },
     footer: {
-      padding: `${theme.spacing.medium} ${theme.spacing.large}`,
-      borderTop: `1px solid ${theme.colors.border}`,
-      flexShrink: 0,
-    },
-    progressContainer: {
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: theme.spacing.medium,
+      padding: isDesktop ? '2rem' : '1.5rem',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '1.5rem',
+      alignItems: 'center',
+      borderTop: isDesktop ? 'none' : `1px solid ${theme.colors.border}40`, // Visual separation on mobile
+      backgroundColor: theme.colors.surface, // Ensure footer is opaque over content
+      flexShrink: 0, // Prevent footer from shrinking
     },
     dotsContainer: {
         display: 'flex',
-        gap: theme.spacing.small,
+        gap: '0.5rem',
     },
     dot: {
-        width: '10px',
-        height: '10px',
+        width: '8px',
+        height: '8px',
         borderRadius: '50%',
         backgroundColor: theme.colors.borderStrong,
-        transition: 'background-color 0.3s',
+        transition: 'all 0.3s ease',
         cursor: 'pointer',
     },
     activeDot: {
         backgroundColor: theme.colors.accent1,
+        transform: 'scale(1.2)',
+        width: '20px',
+        borderRadius: '4px',
     },
-    navContainer: {
+    controlsRow: {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginTop: theme.spacing.medium,
+        width: '100%',
     },
-    navButton: {
+    secondaryButton: {
         background: 'none',
         border: 'none',
         color: theme.colors.secondaryText,
+        fontSize: '0.9rem',
         fontWeight: 600,
-        fontSize: theme.typography.fontSize.small,
         cursor: 'pointer',
-        padding: `${theme.spacing.small} 0`,
-        visibility: 'visible' as 'visible',
+        padding: '0.5rem 1rem',
     },
-    navButtonHidden: {
-        visibility: 'hidden' as 'hidden',
-    },
-    finishButton: {
-        color: theme.colors.accent1,
+    primaryButton: {
+        backgroundColor: theme.colors.primaryText,
+        color: theme.colors.surface,
+        border: 'none',
+        borderRadius: '50px',
+        padding: '0.75rem 2rem',
+        fontSize: '1rem',
         fontWeight: 700,
+        cursor: 'pointer',
+        transition: 'transform 0.1s',
+        boxShadow: theme.shadows.medium,
     },
     checkboxContainer: {
         display: 'flex',
         alignItems: 'center',
-        gap: theme.spacing.small,
+        gap: '0.5rem',
         cursor: 'pointer',
+        opacity: 0.8,
     },
     checkboxLabel: {
-        fontSize: theme.typography.fontSize.extraSmall,
+        fontSize: '0.75rem',
         color: theme.colors.secondaryText,
         userSelect: 'none' as 'none',
     },
@@ -246,60 +254,59 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose, steps })
     <>
       <style>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); } }
+        @keyframes scaleUp { from { transform: scale(0.9) translateY(20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
       `}</style>
       <div style={styles.backdrop} onClick={handleClose}>
         <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-          <header style={styles.header}>
-            <h2 style={styles.title}>Guía Rápida</h2>
-            <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={handleClose}><CloseIcon color={theme.colors.primaryText} /></button>
-          </header>
+          <div style={styles.closeButtonWrapper}>
+             <button style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5 }} onClick={handleClose}>
+                <CloseIcon color={theme.colors.primaryText} />
+             </button>
+          </div>
+
           <div style={styles.carouselContainer} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
             <div style={styles.carouselTrack}>
               {steps.map((step, index) => (
                 <div key={index} style={styles.carouselSlide}>
-                  <div style={styles.iconContainer}>
+                  <div style={styles.iconCircle}>
                     {step.icon && <div style={styles.icon}>{step.icon}</div>}
                   </div>
-                  <div style={styles.textContainer}>
-                    <h3 style={styles.stepTitle}>{step.title}</h3>
-                    <p style={styles.stepContent}>{step.content}</p>
-                  </div>
+                  <h3 style={styles.stepTitle}>{step.title}</h3>
+                  <p style={styles.stepContent}>{step.content}</p>
                 </div>
               ))}
             </div>
           </div>
-          <footer style={styles.footer}>
-            <div style={styles.progressContainer}>
-              <div style={styles.dotsContainer}>
-                {steps.map((_, index) => (
-                  <div 
-                    key={index} 
-                    style={index === currentStep ? {...styles.dot, ...styles.activeDot} : styles.dot}
-                    onClick={() => setCurrentStep(index)}
-                  ></div>
-                ))}
-              </div>
+
+          <div style={styles.footer}>
+            <div style={styles.dotsContainer}>
+              {steps.map((_, index) => (
+                <div 
+                  key={index} 
+                  style={index === currentStep ? {...styles.dot, ...styles.activeDot} : styles.dot}
+                  onClick={() => setCurrentStep(index)}
+                ></div>
+              ))}
             </div>
-            <div style={styles.navContainer}>
-                <button
-                    style={currentStep > 0 ? styles.navButton : {...styles.navButton, ...styles.navButtonHidden}}
-                    onClick={handlePrev}
-                >
-                    Anterior
-                </button>
-                 <label style={styles.checkboxContainer}>
+            
+            <div style={styles.controlsRow}>
+                <label style={styles.checkboxContainer}>
                     <input type="checkbox" checked={dontShowAgain} onChange={() => setDontShowAgain(!dontShowAgain)} />
-                    <span style={styles.checkboxLabel}>No volver a mostrar</span>
+                    <span style={styles.checkboxLabel}>No mostrar</span>
                 </label>
-                <button
-                    style={currentStep < steps.length - 1 ? styles.navButton : {...styles.navButton, ...styles.finishButton}}
-                    onClick={currentStep < steps.length - 1 ? handleNext : handleFinish}
-                >
-                    {currentStep < steps.length - 1 ? 'Siguiente' : 'Finalizar'}
-                </button>
+
+                <div style={{display: 'flex', gap: '1rem', alignItems: 'center'}}>
+                    {currentStep > 0 && (
+                        <button style={styles.secondaryButton} onClick={handlePrev}>
+                            Atrás
+                        </button>
+                    )}
+                    <button style={styles.primaryButton} onClick={handleNext}>
+                        {currentStep < steps.length - 1 ? 'Siguiente' : '¡Vamos!'}
+                    </button>
+                </div>
             </div>
-          </footer>
+          </div>
         </div>
       </div>
     </>

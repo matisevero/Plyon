@@ -5,6 +5,9 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useMemo } from 'react';
 // FIX: Using parseLocalDate to handle dates consistently and avoid timezone issues.
 import { parseLocalDate } from '../../utils/analytics';
+import SectionHelp from '../../components/common/SectionHelp';
+import { BarChartIcon } from '../../components/icons/BarChartIcon';
+import Card from '../../components/common/Card';
 
 interface YearlyStats {
   year: string;
@@ -180,6 +183,10 @@ const SeasonalComparison: React.FC<SeasonalComparisonProps> = ({ matches }) => {
     return Object.values(stats).sort((a, b) => parseInt(a.year) - parseInt(b.year));
   }, [matches]);
 
+  const seasonalGuide = [
+      { title: "Comparativa Anual", content: "Pon frente a frente tus temporadas. ¿Estás mejorando tus cifras de goles o victorias respecto al año pasado?", icon: <BarChartIcon size={48} /> }
+  ];
+
   const styles: { [key: string]: React.CSSProperties } = {
     container: { display: 'flex', flexDirection: 'column', gap: theme.spacing.extraLarge },
     chartSection: { display: 'flex', flexDirection: 'column', gap: theme.spacing.small },
@@ -202,35 +209,37 @@ const SeasonalComparison: React.FC<SeasonalComparisonProps> = ({ matches }) => {
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.chartSection}>
-        <h4 style={styles.chartTitle}>Comparación de resultados</h4>
-        <SeasonalComparisonChart
-            data={yearlyData}
-            yKey1="wins"
-            yKey2="draws"
-            yKey3="losses"
-            label1="Victorias"
-            label2="Empates"
-            label3="Derrotas"
-            color1={theme.colors.win}
-            color2={theme.colors.draw}
-            color3={theme.colors.loss}
-        />
-      </div>
-      <div style={styles.chartSection}>
-        <h4 style={styles.chartTitle}>Comparación de contribuciones</h4>
-         <SeasonalComparisonChart
-            data={yearlyData}
-            yKey1="goals"
-            yKey2="assists"
-            label1="Goles"
-            label2="Asistencias"
-            color1={theme.colors.accent1}
-            color2={theme.colors.accent2}
-        />
-      </div>
-    </div>
+    <Card title={<>Comparativa anual <SectionHelp steps={seasonalGuide} /></>}>
+        <div style={styles.container}>
+        <div style={styles.chartSection}>
+            <h4 style={styles.chartTitle}>Comparación de resultados</h4>
+            <SeasonalComparisonChart
+                data={yearlyData}
+                yKey1="wins"
+                yKey2="draws"
+                yKey3="losses"
+                label1="Victorias"
+                label2="Empates"
+                label3="Derrotas"
+                color1={theme.colors.win}
+                color2={theme.colors.draw}
+                color3={theme.colors.loss}
+            />
+        </div>
+        <div style={styles.chartSection}>
+            <h4 style={styles.chartTitle}>Comparación de contribuciones</h4>
+            <SeasonalComparisonChart
+                data={yearlyData}
+                yKey1="goals"
+                yKey2="assists"
+                label1="Goles"
+                label2="Asistencias"
+                color1={theme.colors.accent1}
+                color2={theme.colors.accent2}
+            />
+        </div>
+        </div>
+    </Card>
   );
 };
 

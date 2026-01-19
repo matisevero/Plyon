@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -8,9 +9,11 @@ interface StatCardProps {
   icon?: React.ReactNode;
   count?: number;
   isOngoing?: boolean;
+  trend?: 'up' | 'down' | 'neutral'; // New prop for direction
+  reverseTrendColor?: boolean; // New prop: true means Up is Bad (Red), Down is Good (Green)
 }
 
-const StatCard: React.FC<StatCardProps> = ({ label, value, valueStyle = {}, icon, count, isOngoing }) => {
+const StatCard: React.FC<StatCardProps> = ({ label, value, valueStyle = {}, icon, count, isOngoing, trend, reverseTrendColor = false }) => {
   const { theme } = useTheme();
   const [displayValue, setDisplayValue] = useState<string | number>(typeof value === 'number' ? 0 : value);
   const valueRef = useRef(0);
@@ -34,7 +37,10 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, valueStyle = {}, icon
       const progress = timestamp - startTime;
       const percentage = Math.min(progress / duration, 1);
 
-      const animatedValue = Math.floor(startValue + (targetValue - startValue) * percentage);
+      // Ease out quart function for smooth landing
+      const easeOut = 1 - Math.pow(1 - percentage, 4);
+      
+      const animatedValue = Math.floor(startValue + (targetValue - startValue) * easeOut);
       setDisplayValue(animatedValue);
 
       if (progress < duration) {
@@ -45,6 +51,37 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, valueStyle = {}, icon
     requestAnimationFrame(animate);
 
   }, [value, isNumeric]);
+
+  const getTrendIcon = () => {
+      if (!trend || trend === 'neutral') return null;
+      
+      const isUp = trend === 'up';
+      // Default: Up = Good (Green), Down = Bad (Loss color/Red)
+      // Reverse: Up = Bad (Loss color/Red), Down = Good (Green)
+      
+      let color;
+      if (reverseTrendColor) {
+          color = isUp ? theme.colors.loss : theme.colors.win;
+      } else {
+          color = isUp ? theme.colors.win : theme.colors.loss; // Assuming loss color is reddish/negative indicator
+      }
+
+      // We use simple arrows, maybe slightly rotated for style
+      return (
+          <span style={{ 
+              color: color, 
+              fontSize: '0.8rem', 
+              marginLeft: '6px', 
+              verticalAlign: 'middle',
+              display: 'inline-flex',
+              alignItems: 'center',
+              fontWeight: 800,
+              opacity: 0.8
+          }}>
+              {isUp ? '↑' : '↓'}
+          </span>
+      );
+  };
 
   const styles: { [key: string]: React.CSSProperties } = {
     card: {
@@ -58,10 +95,12 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, valueStyle = {}, icon
       justifyContent: 'center',
       textAlign: 'center',
       gap: '0.25rem',
+      position: 'relative',
+      transition: 'transform 0.2s',
     },
     valueContainer: {
       display: 'flex',
-      alignItems: 'baseline',
+      alignItems: 'center', // Center align vertically
       justifyContent: 'center',
       gap: '0.25rem',
       width: '100%',
@@ -71,6 +110,7 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, valueStyle = {}, icon
       fontWeight: 700,
       color: theme.colors.primaryText,
       lineHeight: 1.1,
+      fontVariantNumeric: 'tabular-nums', // Keeps numbers from jumping width
     },
     countBadge: {
       backgroundColor: theme.colors.border,
@@ -97,7 +137,10 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, valueStyle = {}, icon
     <div style={styles.card}>
        <div style={styles.valueContainer}>
         {isOngoing && <span style={{ fontSize: '1.25rem' }}>🏅</span>}
-        <span style={{...styles.value, ...valueStyle}}>{isNumeric ? displayValue : value}</span>
+        <span style={{...styles.value, ...valueStyle}}>
+            {isNumeric ? displayValue : value}
+        </span>
+        {getTrendIcon()}
         {count && count > 1 && <span style={styles.countBadge}>x{count}</span>}
       </div>
       <div style={styles.labelContainer}>

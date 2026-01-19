@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -81,7 +82,10 @@ const YearFilter: React.FC<YearFilterProps> = ({ years, selectedYear, onSelectYe
   const styles: { [key: string]: React.CSSProperties } = {
     container: { 
       width: '100%',
-      position: 'relative'
+      // minWidth: 0 is important for flex/grid children to shrink properly
+      minWidth: 0,
+      position: 'relative',
+      overflow: 'hidden',
     },
     scrollContainer: {
       display: 'flex', 
@@ -90,6 +94,11 @@ const YearFilter: React.FC<YearFilterProps> = ({ years, selectedYear, onSelectYe
       scrollbarWidth: 'none',
       msOverflowStyle: 'none',
       paddingBottom: '0.25rem', // Space for focus ring
+      width: '100%', // Force full width usage
+      boxSizing: 'border-box',
+      // Masking for smooth edges
+      maskImage: isScrollable ? 'linear-gradient(to right, transparent, black 5%, black 95%, transparent)' : 'none',
+      WebkitMaskImage: isScrollable ? 'linear-gradient(to right, transparent, black 5%, black 95%, transparent)' : 'none',
     },
     tabButton: {
       padding: size === 'small' ? `0.3rem 0.8rem` : `${theme.spacing.small} ${theme.spacing.medium}`,
@@ -102,16 +111,29 @@ const YearFilter: React.FC<YearFilterProps> = ({ years, selectedYear, onSelectYe
       borderRadius: theme.borderRadius.medium,
       transition: 'all 0.2s ease',
       whiteSpace: 'nowrap',
+      flexShrink: 0, // Prevent buttons from shrinking
     },
-    fadeOverlay: {
+    // Fallback fade overlay if mask-image isn't desired or for older browsers (optional, masking is cleaner)
+    fadeOverlayRight: {
       position: 'absolute',
       top: 0,
       right: 0,
-      width: '50px',
+      width: '30px',
       height: '100%',
-      background: `linear-gradient(to left, ${theme.colors.surface}DD, ${theme.colors.surface}00)`,
+      background: `linear-gradient(to left, ${theme.colors.surface}, transparent)`,
       pointerEvents: 'none',
-    }
+      display: isScrollable ? 'block' : 'none'
+    },
+    fadeOverlayLeft: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '30px',
+        height: '100%',
+        background: `linear-gradient(to right, ${theme.colors.surface}, transparent)`,
+        pointerEvents: 'none',
+        display: isScrollable ? 'block' : 'none'
+      }
   };
 
   return (
@@ -119,6 +141,9 @@ const YearFilter: React.FC<YearFilterProps> = ({ years, selectedYear, onSelectYe
       <style>{`.no-scrollbar::-webkit-scrollbar { display: none; }`}</style>
       <div style={styles.container}>
         <div style={styles.scrollContainer} className="no-scrollbar" ref={scrollContainerRef}>
+          {/* Add padding spacers for mask/fade effect */}
+          {isScrollable && <div style={{width: '1px', flexShrink: 0}} />}
+          
           {allOptions.map(year => (
             <button
               key={year}
@@ -130,8 +155,12 @@ const YearFilter: React.FC<YearFilterProps> = ({ years, selectedYear, onSelectYe
               {year === 'all' ? allTimeLabel : year}
             </button>
           ))}
+          
+          {isScrollable && <div style={{width: '1px', flexShrink: 0}} />}
         </div>
-        {isScrollable && <div style={styles.fadeOverlay} />}
+        {/* If masks fail or aren't supported, we could use these overlays, but masking is cleaner. 
+            For now, relying on maskImage as modern solution. 
+        */}
       </div>
     </>
   );

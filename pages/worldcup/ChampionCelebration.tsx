@@ -1,7 +1,9 @@
-import React from 'react';
+
+import React, { useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import Confetti from '../../components/effects/Confetti';
 import { WORLD_CUP_LOGO } from '../../utils/analytics';
+import { TrophyIcon } from '../../components/icons/TrophyIcon';
 
 interface ChampionCelebrationProps {
   onNextCampaign: () => void;
@@ -9,6 +11,7 @@ interface ChampionCelebrationProps {
 
 const ChampionCelebration: React.FC<ChampionCelebrationProps> = ({ onNextCampaign }) => {
   const { theme } = useTheme();
+  const [imgError, setImgError] = useState(false);
 
   const styles: { [key: string]: React.CSSProperties } = {
     container: {
@@ -62,7 +65,16 @@ const ChampionCelebration: React.FC<ChampionCelebrationProps> = ({ onNextCampaig
       <Confetti />
       <div style={styles.container}>
         <div style={styles.trophyContainer}>
-          <img src={WORLD_CUP_LOGO[theme.name]} alt="Logo de la Copa del Mundo 2026" style={{ width: '150px', height: 'auto', objectFit: 'contain' }} />
+          {!imgError ? (
+              <img 
+                src={WORLD_CUP_LOGO[theme.name]} 
+                alt="Logo de la Copa del Mundo 2026" 
+                style={{ width: '150px', height: 'auto', objectFit: 'contain' }} 
+                onError={() => setImgError(true)}
+              />
+          ) : (
+              <TrophyIcon size={150} color="#FFD700" />
+          )}
         </div>
         <h1 style={styles.title}>¡CAMPEÓN DEL MUNDO!</h1>
         <p style={styles.subtitle}>Has conquistado la gloria. La copa es tuya.</p>

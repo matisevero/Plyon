@@ -309,22 +309,11 @@ const ActivityCalendar: React.FC<ActivityCalendarProps> = ({ matches }) => {
     <Card title={`Calendario de actividad (${yearToDisplay})`}>
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
-          width: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background-color: ${theme.colors.borderStrong};
-          border-radius: 10px;
-          border: 2px solid ${theme.colors.surface};
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background-color: ${theme.colors.secondaryText};
+          display: none;
         }
         .custom-scrollbar {
-          scrollbar-width: thin;
-          scrollbar-color: ${theme.colors.borderStrong} ${theme.colors.surface};
+          -ms-overflow-style: none;
+          scrollbar-width: none;
         }
       `}</style>
       <div style={styles.container}>

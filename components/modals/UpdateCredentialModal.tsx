@@ -1,10 +1,12 @@
+
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { CloseIcon } from '../icons/CloseIcon';
+import { EyeIcon } from '../icons/EyeIcon';
+import { EyeOffIcon } from '../icons/EyeOffIcon';
 import { Loader } from '../Loader';
-import { FirebaseError } from 'firebase/app';
 
 interface UpdateCredentialModalProps {
   isOpen: boolean;
@@ -27,12 +29,21 @@ const UpdateCredentialModal: React.FC<UpdateCredentialModalProps> = ({ isOpen, o
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
+  // Visibility states
+  const [showCurrentPasswordEmail, setShowCurrentPasswordEmail] = useState(false);
+  const [showCurrentPasswordPass, setShowCurrentPasswordPass] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const getFirebaseErrorMessage = (code: string) => {
     switch (code) {
-      case 'auth/wrong-password': return 'La contraseña actual es incorrecta.';
+      case 'auth/wrong-password': 
+      case 'auth/invalid-credential':
+        return 'La contraseña actual es incorrecta.';
       case 'auth/invalid-email': return 'El formato del nuevo correo no es válido.';
       case 'auth/email-already-in-use': return 'El nuevo correo electrónico ya está en uso.';
       case 'auth/weak-password': return 'La nueva contraseña debe tener al menos 6 caracteres.';
+      case 'auth/too-many-requests': return 'Demasiados intentos. Por favor, inténtalo más tarde.';
       default: return 'Ocurrió un error inesperado.';
     }
   };
@@ -46,6 +57,10 @@ const UpdateCredentialModal: React.FC<UpdateCredentialModalProps> = ({ isOpen, o
     setCurrentPasswordForPassword('');
     setNewPassword('');
     setConfirmNewPassword('');
+    setShowCurrentPasswordEmail(false);
+    setShowCurrentPasswordPass(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
   };
 
   const handleClose = () => {
@@ -87,8 +102,8 @@ const UpdateCredentialModal: React.FC<UpdateCredentialModalProps> = ({ isOpen, o
       setTimeout(() => {
         handleClose();
       }, 2000);
-    } catch (error) {
-      const message = error instanceof FirebaseError ? getFirebaseErrorMessage(error.code) : 'Error al actualizar el correo.';
+    } catch (error: any) {
+      const message = (error && typeof error === 'object' && 'code' in error) ? getFirebaseErrorMessage(error.code) : 'Error al actualizar el correo.';
       setError(message);
     } finally {
       setIsLoading(false);
@@ -110,8 +125,8 @@ const UpdateCredentialModal: React.FC<UpdateCredentialModalProps> = ({ isOpen, o
       setTimeout(() => {
         handleClose();
       }, 2000);
-    } catch (error) {
-      const message = error instanceof FirebaseError ? getFirebaseErrorMessage(error.code) : 'Error al actualizar la contraseña.';
+    } catch (error: any) {
+      const message = (error && typeof error === 'object' && 'code' in error) ? getFirebaseErrorMessage(error.code) : 'Error al actualizar la contraseña.';
       setError(message);
     } finally {
       setIsLoading(false);
@@ -149,6 +164,31 @@ const UpdateCredentialModal: React.FC<UpdateCredentialModalProps> = ({ isOpen, o
         color: theme.colors.primaryText, fontSize: theme.typography.fontSize.medium,
         outline: 'none', boxSizing: 'border-box',
     },
+    passwordWrapper: {
+        position: 'relative',
+        width: '100%'
+    },
+    inputPassword: {
+        width: '100%', padding: theme.spacing.medium, paddingRight: '45px', // Space for icon
+        backgroundColor: theme.colors.background,
+        border: `1px solid ${theme.colors.borderStrong}`, borderRadius: theme.borderRadius.medium,
+        color: theme.colors.primaryText, fontSize: theme.typography.fontSize.medium,
+        outline: 'none', boxSizing: 'border-box',
+    },
+    togglePasswordBtn: {
+        position: 'absolute',
+        right: '10px',
+        top: '50%',
+        transform: 'translateY(-50%)',
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        color: theme.colors.secondaryText,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '5px'
+    },
     button: {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         gap: theme.spacing.medium, padding: `${theme.spacing.medium} ${theme.spacing.large}`,
@@ -185,16 +225,85 @@ const UpdateCredentialModal: React.FC<UpdateCredentialModalProps> = ({ isOpen, o
                       {mode === 'email' ? (
                           <form onSubmit={handleEmailUpdate} style={styles.form}>
                               <input type="email" placeholder="Nuevo correo electrónico" value={newEmail} onChange={e => setNewEmail(e.target.value)} style={styles.input} required />
-                              <input type="password" placeholder="Contraseña actual para confirmar" value={currentPasswordForEmail} onChange={e => setCurrentPasswordForEmail(e.target.value)} style={styles.input} required />
+                              
+                              <div style={styles.passwordWrapper}>
+                                  <input 
+                                      type={showCurrentPasswordEmail ? "text" : "password"} 
+                                      placeholder="Contraseña actual" 
+                                      value={currentPasswordForEmail} 
+                                      onChange={e => setCurrentPasswordForEmail(e.target.value)} 
+                                      style={styles.inputPassword} 
+                                      required 
+                                  />
+                                  <button 
+                                      type="button" 
+                                      onClick={() => setShowCurrentPasswordEmail(!showCurrentPasswordEmail)}
+                                      style={styles.togglePasswordBtn}
+                                  >
+                                      {showCurrentPasswordEmail ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
+                                  </button>
+                              </div>
+
                               <button type="submit" disabled={isLoading} style={styles.button}>
                                   {isLoading ? <Loader /> : 'Actualizar Correo'}
                               </button>
                           </form>
                       ) : (
                           <form onSubmit={handlePasswordUpdate} style={styles.form}>
-                              <input type="password" placeholder="Contraseña actual" value={currentPasswordForPassword} onChange={e => setCurrentPasswordForPassword(e.target.value)} style={styles.input} required />
-                              <input type="password" placeholder="Nueva contraseña" value={newPassword} onChange={e => setNewPassword(e.target.value)} style={styles.input} required />
-                              <input type="password" placeholder="Confirmar nueva contraseña" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} style={styles.input} required />
+                              <div style={styles.passwordWrapper}>
+                                  <input 
+                                      type={showCurrentPasswordPass ? "text" : "password"} 
+                                      placeholder="Contraseña actual" 
+                                      value={currentPasswordForPassword} 
+                                      onChange={e => setCurrentPasswordForPassword(e.target.value)} 
+                                      style={styles.inputPassword} 
+                                      required 
+                                  />
+                                  <button 
+                                      type="button" 
+                                      onClick={() => setShowCurrentPasswordPass(!showCurrentPasswordPass)}
+                                      style={styles.togglePasswordBtn}
+                                  >
+                                      {showCurrentPasswordPass ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
+                                  </button>
+                              </div>
+
+                              <div style={styles.passwordWrapper}>
+                                  <input 
+                                      type={showNewPassword ? "text" : "password"} 
+                                      placeholder="Nueva contraseña" 
+                                      value={newPassword} 
+                                      onChange={e => setNewPassword(e.target.value)} 
+                                      style={styles.inputPassword} 
+                                      required 
+                                  />
+                                  <button 
+                                      type="button" 
+                                      onClick={() => setShowNewPassword(!showNewPassword)}
+                                      style={styles.togglePasswordBtn}
+                                  >
+                                      {showNewPassword ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
+                                  </button>
+                              </div>
+
+                              <div style={styles.passwordWrapper}>
+                                  <input 
+                                      type={showConfirmPassword ? "text" : "password"} 
+                                      placeholder="Confirmar nueva contraseña" 
+                                      value={confirmNewPassword} 
+                                      onChange={e => setConfirmNewPassword(e.target.value)} 
+                                      style={styles.inputPassword} 
+                                      required 
+                                  />
+                                  <button 
+                                      type="button" 
+                                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                      style={styles.togglePasswordBtn}
+                                  >
+                                      {showConfirmPassword ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
+                                  </button>
+                              </div>
+
                               <button type="submit" disabled={isLoading} style={styles.button}>
                                   {isLoading ? <Loader /> : 'Actualizar Contraseña'}
                               </button>

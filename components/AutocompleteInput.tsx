@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -8,14 +9,19 @@ interface AutocompleteInputProps {
   placeholder?: string;
 }
 
-const AutocompleteInput: React.FC<AutocompleteInputProps> = ({ value, onChange, suggestions, placeholder }) => {
+const AutocompleteInput: React.FC<AutocompleteInputProps> = ({ value = '', onChange, suggestions = [], placeholder }) => {
   const { theme } = useTheme();
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+  const safeValue = value || '';
+
   const filteredSuggestions = suggestions.filter(
-    suggestion =>
-      suggestion.toLowerCase().indexOf(value.toLowerCase()) > -1 &&
-      suggestion.toLowerCase() !== value.toLowerCase()
+    suggestion => {
+        if (!suggestion) return false;
+        const strSuggestion = String(suggestion);
+        return strSuggestion.toLowerCase().indexOf(safeValue.toLowerCase()) > -1 &&
+               strSuggestion.toLowerCase() !== safeValue.toLowerCase();
+    }
   );
 
   const handleSuggestionClick = (suggestion: string) => {
@@ -45,13 +51,13 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({ value, onChange, 
     },
   };
 
-  const suggestionsToShow = (value ? filteredSuggestions : suggestions).slice(0, 5);
+  const suggestionsToShow = (safeValue ? filteredSuggestions : suggestions).slice(0, 5);
 
   return (
     <div style={styles.container}>
       <input
         type="text"
-        value={value}
+        value={safeValue}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setShowSuggestions(true)}
         onBlur={() => setTimeout(() => setShowSuggestions(false), 200)} // Delay to allow click

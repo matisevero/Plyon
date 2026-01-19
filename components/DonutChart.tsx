@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -57,7 +58,7 @@ const DonutChart: React.FC<DonutChartProps> = ({ data }) => {
           
           {validData.map((item, index) => {
             const segmentLength = (item.value / total) * circumference;
-            // Keyframes will be generated for each segment, which is slightly inefficient but works in this context.
+            // Keyframes will be generated for each segment
             const animationKeyframes = `
               @keyframes draw-segment-${index} {
                 from { 
@@ -71,7 +72,7 @@ const DonutChart: React.FC<DonutChartProps> = ({ data }) => {
             const segmentStyle: React.CSSProperties = {
               strokeDasharray: `0 ${circumference}`, // Initial state for animation
               strokeDashoffset: -accumulatedLength,
-              animation: `draw-segment-${index} 0.8s ${index * 0.15}s ease-out forwards`,
+              animation: `draw-segment-${index} 0.8s ${index * 0.15}s cubic-bezier(0.34, 1.56, 0.64, 1) forwards`, // Added bounce easing
             };
             
             accumulatedLength += segmentLength;

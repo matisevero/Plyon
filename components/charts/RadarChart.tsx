@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -115,6 +116,10 @@ const RadarChart: React.FC<RadarChartProps> = ({ playersData, size = 300, showLe
           from { opacity: 0; transform: scale(0.8); } 
           to { opacity: 1; transform: scale(1); } 
         }
+        @keyframes growRadar {
+          from { transform: scale(0); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
       `}</style>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} onClick={handleBackgroundClick}>
         {/* Background Grid */}
@@ -155,44 +160,38 @@ const RadarChart: React.FC<RadarChartProps> = ({ playersData, size = 300, showLe
 
         {/* Player Data Polygons */}
         {playersPointsAndPaths.map(({ path }, i) => (
-          <polygon
-            key={`player-poly-${i}`}
-            points={path}
-            fill={playersData[i].color}
-            fillOpacity="0.3"
-            stroke={playersData[i].color}
-            strokeWidth="2"
-            strokeDasharray={playersData[i].isDashed ? "4 4" : "none"}
-          />
-        ))}
-        
-        {/* Player Data Points (Circles and Click Targets) */}
-        {playersPointsAndPaths.map(({ points }, i) => (
-          <g key={`player-points-${i}`}>
-            {points.map((point, j) => (
-              <g key={`point-${i}-${j}`}>
-                {/* Visible point circle */}
-                <circle
-                  cx={point.x}
-                  cy={point.y}
-                  r="4"
-                  fill={playersData[i].color}
-                  stroke={theme.colors.surface}
-                  strokeWidth="2"
-                />
-                {/* Larger invisible click target */}
-                <circle
-                  cx={point.x}
-                  cy={point.y}
-                  r="12"
-                  fill="transparent"
-                  cursor="pointer"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActivePoint(activePoint && activePoint.playerIndex === i && activePoint.pointIndex === j ? null : { playerIndex: i, pointIndex: j });
-                  }}
-                />
-              </g>
+          <g key={`player-group-${i}`} style={{ transformOrigin: `${center}px ${center}px`, animation: `growRadar 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards`, animationDelay: `${i * 0.1}s` }}>
+            <polygon
+                points={path}
+                fill={playersData[i].color}
+                fillOpacity="0.3"
+                stroke={playersData[i].color}
+                strokeWidth="2"
+                strokeDasharray={playersData[i].isDashed ? "4 4" : "none"}
+            />
+            {/* Player Data Points (Circles and Click Targets) */}
+            {playersPointsAndPaths[i].points.map((point, j) => (
+                <g key={`point-${i}-${j}`}>
+                    <circle
+                    cx={point.x}
+                    cy={point.y}
+                    r="4"
+                    fill={playersData[i].color}
+                    stroke={theme.colors.surface}
+                    strokeWidth="2"
+                    />
+                    <circle
+                    cx={point.x}
+                    cy={point.y}
+                    r="12"
+                    fill="transparent"
+                    cursor="pointer"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setActivePoint(activePoint && activePoint.playerIndex === i && activePoint.pointIndex === j ? null : { playerIndex: i, pointIndex: j });
+                    }}
+                    />
+                </g>
             ))}
           </g>
         ))}

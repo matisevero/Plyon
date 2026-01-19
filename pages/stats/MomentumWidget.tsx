@@ -6,6 +6,9 @@ import Card from '../../components/common/Card';
 import MomentumChart from './MomentumChart';
 import YearFilter from '../../components/YearFilter';
 import { parseLocalDate } from '../../utils/analytics';
+import SectionHelp from '../../components/common/SectionHelp';
+import { ActivityIcon } from '../../components/icons/ActivityIcon';
+import { TrendingUpIcon } from '../../components/icons/TrendingUpIcon';
 
 interface MomentumWidgetProps {
   matches: Match[];
@@ -30,8 +33,13 @@ const MomentumWidget: React.FC<MomentumWidgetProps> = ({ matches }) => {
     return new Date().getFullYear().toString();
   }, [selectedYear, matches]);
 
+  const momentumGuide = [
+    { title: "Momentum", content: "Visualiza tu racha actual y pasada. Cada barra representa un partido: Verde (Victoria), Azul (Empate), Rojo (Derrota).", icon: <ActivityIcon size={48} /> },
+    { title: "Consistencia", content: "La línea superpuesta es tu Índice de Consistencia. Una línea alta y estable significa que rindes siempre al mismo nivel.", icon: <TrendingUpIcon size={48} /> }
+  ];
+
   return (
-    <Card title={`Momentum de Temporada (${displayYear})`}>
+    <Card title={<>Momentum de Temporada ({displayYear}) <SectionHelp steps={momentumGuide} /></>}>
         <div style={{ marginBottom: theme.spacing.medium }}>
             <YearFilter years={availableYears} selectedYear={selectedYear} onSelectYear={setSelectedYear} size="small" allTimeLabel="General" />
         </div>

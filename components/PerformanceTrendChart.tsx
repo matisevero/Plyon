@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -70,8 +71,29 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({ data }) =
     yAxisLabels.push(value);
   }
 
+  // Animation constants
+  const totalLength = chartWidth + chartHeight; // Approx length for dasharray
+
   return (
     <div style={styles.container}>
+      <style>{`
+        @keyframes drawLine {
+          to { stroke-dashoffset: 0; }
+        }
+        @keyframes fadeInPoints {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        .chart-line {
+          stroke-dasharray: 2000;
+          stroke-dashoffset: 2000;
+          animation: drawLine 1.5s ease-out forwards;
+        }
+        .chart-point {
+          opacity: 0;
+          animation: fadeInPoints 0.5s ease-out forwards;
+        }
+      `}</style>
       <svg viewBox={`0 0 ${SvgWidth} ${SvgHeight}`} style={{ width: '100%', height: 'auto' }}>
         {yAxisLabels.map((label, i) => (
           <g key={i}>
@@ -97,13 +119,13 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({ data }) =
         })}
         <text x={(SvgWidth + padding.left - padding.right)/2} y={SvgHeight - 5} fill={theme.colors.secondaryText} fontSize="16" textAnchor="middle">Partidos</text>
 
-        <polyline points={goalPoints} fill="none" stroke={theme.colors.accent1} strokeWidth="2" />
-        <polyline points={assistPoints} fill="none" stroke={theme.colors.accent2} strokeWidth="2" />
+        <polyline points={goalPoints} fill="none" stroke={theme.colors.accent1} strokeWidth="2" className="chart-line" />
+        <polyline points={assistPoints} fill="none" stroke={theme.colors.accent2} strokeWidth="2" className="chart-line" style={{animationDelay: '0.3s'}} />
 
         {calculatedPoints.map((p, i) => (
           <React.Fragment key={i}>
-            <circle cx={p.x} cy={p.goalY} r="3" fill={theme.colors.accent1} stroke={theme.colors.surface} strokeWidth="1" />
-            <circle cx={p.x} cy={p.assistY} r="3" fill={theme.colors.accent2} stroke={theme.colors.surface} strokeWidth="1" />
+            <circle cx={p.x} cy={p.goalY} r="3" fill={theme.colors.accent1} stroke={theme.colors.surface} strokeWidth="1" className="chart-point" style={{animationDelay: `${1 + i * 0.05}s`}} />
+            <circle cx={p.x} cy={p.assistY} r="3" fill={theme.colors.accent2} stroke={theme.colors.surface} strokeWidth="1" className="chart-point" style={{animationDelay: `${1.3 + i * 0.05}s`}} />
           </React.Fragment>
         ))}
       </svg>

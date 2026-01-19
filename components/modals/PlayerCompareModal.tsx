@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useData } from '../../contexts/DataContext';
 import type { Match, PlayerContextStats } from '../../types';
 import { CloseIcon } from '../icons/CloseIcon';
 import YearFilter from '../YearFilter';
@@ -54,6 +55,7 @@ const radarMetrics: { label: string; key: string }[] = [
 
 const PlayerCompareModal: React.FC<PlayerCompareModalProps> = ({ isOpen, onClose, allPlayers, allMatches }) => {
   const { theme } = useTheme();
+  const { playerProfile } = useData();
   
   const [playerSlots, setPlayerSlots] = useState<string[]>(['', '', '']);
   const selectedPlayers = useMemo(() => playerSlots.filter(p => p.trim()), [playerSlots]);
@@ -264,10 +266,8 @@ const PlayerCompareModal: React.FC<PlayerCompareModalProps> = ({ isOpen, onClose
       <style>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); } }
-        .subtle-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .subtle-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .subtle-scrollbar::-webkit-scrollbar-thumb { background-color: ${theme.colors.border}; border-radius: 10px; }
-        .subtle-scrollbar { scrollbar-width: thin; scrollbar-color: ${theme.colors.border} transparent; }
+        .subtle-scrollbar::-webkit-scrollbar { display: none; }
+        .subtle-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
       <div style={styles.backdrop} onClick={onClose}>
         <div style={styles.modal} onClick={e => e.stopPropagation()} className="subtle-scrollbar">
@@ -307,7 +307,21 @@ const PlayerCompareModal: React.FC<PlayerCompareModalProps> = ({ isOpen, onClose
                             <thead>
                                 <tr>
                                     <th style={{...styles.tableHeaderCell, textAlign: 'left', paddingLeft: 0}}>Métrica</th>
-                                    {selectedPlayers.map(p => <th key={p} style={styles.tableHeaderCell}>{p}</th>)}
+                                    {selectedPlayers.map(p => {
+                                        const isLinked = !!playerProfile.playerMappings?.[p];
+                                        return (
+                                            <th 
+                                                key={p} 
+                                                style={{
+                                                    ...styles.tableHeaderCell,
+                                                    textDecoration: isLinked ? 'underline' : 'none',
+                                                    textDecorationColor: theme.colors.accent2
+                                                }}
+                                            >
+                                                {p}
+                                            </th>
+                                        );
+                                    })}
                                 </tr>
                             </thead>
                             <tbody>

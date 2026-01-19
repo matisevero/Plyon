@@ -6,9 +6,11 @@ import QualifiersTable from './QualifiersTable';
 import MatchList from '../../components/MatchList';
 import Card from '../../components/common/Card';
 import { ChevronIcon } from '../../components/icons/ChevronIcon';
+import { StarIcon } from '../../components/icons/StarIcon';
 import { generateQualifiersStandings, CONFEDERATIONS, parseLocalDate } from '../../utils/analytics';
 import Confetti from '../../components/effects/Confetti';
 import ConfirmationModal from '../../components/modals/ConfirmationModal';
+import { ClipboardIcon } from '../../components/icons/ClipboardIcon';
 
 const QualificationResultView: React.FC<{ onBackToSelection: () => void }> = ({ onBackToSelection }) => {
     const { theme } = useTheme();
@@ -67,13 +69,13 @@ const QualificationResultView: React.FC<{ onBackToSelection: () => void }> = ({ 
 interface QualifiersViewProps {
   onBackToSelection: () => void;
   onShowTutorial: () => void;
+  onOpenHistory: () => void;
 }
 
-const QualifiersView: React.FC<QualifiersViewProps> = ({ onBackToSelection, onShowTutorial }) => {
+const QualifiersView: React.FC<QualifiersViewProps> = ({ onBackToSelection, onShowTutorial, onOpenHistory }) => {
     const { theme } = useTheme();
     const { playerProfile, abandonQualifiers, matches } = useData();
-    const { qualifiersProgress, qualifiersHistory } = playerProfile;
-    const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
+    const { qualifiersProgress } = playerProfile;
     const [isConfirmAbandonOpen, setIsConfirmAbandonOpen] = useState(false);
     const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 992);
 
@@ -118,8 +120,6 @@ const QualifiersView: React.FC<QualifiersViewProps> = ({ onBackToSelection, onSh
         },
         contentGrid: { display: 'grid', gridTemplateColumns: isDesktop ? '2fr 1fr' : '1fr', gap: '2rem' },
         sectionTitle: { fontSize: '1.2rem', fontWeight: 700, marginBottom: '1rem' },
-        historyContainer: { marginTop: '3rem', backgroundColor: theme.colors.surface, borderRadius: '12px', border: `1px solid ${theme.colors.border}` },
-        historyHeader: { display: 'flex', justifyContent: 'space-between', padding: '1rem', width: '100%', cursor: 'pointer', background: 'none', border: 'none' },
         backButton: { 
             flex: isDesktop ? 'initial' : 1,
             background: 'transparent', 
@@ -130,8 +130,9 @@ const QualifiersView: React.FC<QualifiersViewProps> = ({ onBackToSelection, onSh
             cursor: 'pointer',
             fontWeight: 600,
             fontSize: '0.9rem',
-            textAlign: 'center'
-        }
+            textAlign: 'center',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px'
+        },
     };
 
     return (
@@ -139,6 +140,9 @@ const QualifiersView: React.FC<QualifiersViewProps> = ({ onBackToSelection, onSh
             <div style={styles.headerContainer}>
                 <h2 style={styles.pageTitle}>{conf.name} #{qualifiersProgress.campaignNumber}</h2>
                 <div style={styles.actionsContainer}>
+                    <button onClick={onOpenHistory} style={styles.backButton}>
+                        <ClipboardIcon size={16} /> Historial
+                    </button>
                     <button onClick={onBackToSelection} style={styles.backButton}>Volver</button>
                     <button onClick={() => setIsConfirmAbandonOpen(true)} style={{...styles.backButton, color: theme.colors.loss, borderColor: theme.colors.loss + '40'}}>Abandonar</button>
                 </div>
@@ -153,24 +157,6 @@ const QualifiersView: React.FC<QualifiersViewProps> = ({ onBackToSelection, onSh
                      <h3 style={styles.sectionTitle}>Partidos de Eliminatoria ({matchesPlayedCount})</h3>
                      <MatchList matches={campaignMatches} allMatches={campaignMatches} allPlayers={[]} isReadOnly={true} />
                 </div>
-            </div>
-            
-            <div style={styles.historyContainer}>
-                <button style={styles.historyHeader} onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}>
-                    <h3 style={{margin: 0, fontSize: '1.1rem', color: theme.colors.primaryText}}>Historial de Campañas</h3>
-                    <ChevronIcon isExpanded={isHistoryExpanded} />
-                </button>
-                {isHistoryExpanded && (
-                    <div style={{padding: '1rem'}}>
-                        {qualifiersHistory && qualifiersHistory.length > 0 ? (
-                            qualifiersHistory.map(campaign => (
-                                <div key={campaign.campaignNumber} style={{padding: '1rem', borderBottom: `1px solid ${theme.colors.border}`}}>
-                                    <strong>{CONFEDERATIONS[campaign.confederation].name}</strong> - Pos: {campaign.finalPosition}°
-                                </div>
-                            ))
-                        ) : <p style={{color: theme.colors.secondaryText, fontStyle: 'italic', textAlign: 'center'}}>No hay historial aún.</p>}
-                    </div>
-                )}
             </div>
 
             <ConfirmationModal

@@ -1,6 +1,6 @@
 import React from 'react';
 
-export const SearchIcon: React.FC<{ size?: number; color?: string }> = ({ size = 16, color = 'currentColor' }) => (
+export const SearchIcon: React.FC<{ size?: number; color?: string; style?: React.CSSProperties }> = ({ size = 16, color = 'currentColor', style }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width={size}
@@ -11,6 +11,7 @@ export const SearchIcon: React.FC<{ size?: number; color?: string }> = ({ size =
     strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
+    style={style}
   >
     <circle cx="11" cy="11" r="8" />
     <line x1="21" y1="21" x2="16.65" y2="16.65" />

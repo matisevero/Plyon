@@ -1,10 +1,11 @@
+
 import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 
 interface CardProps {
   children: React.ReactNode;
   style?: React.CSSProperties;
-  title?: string;
+  title?: React.ReactNode; // Changed from string to ReactNode
 }
 
 const Card: React.FC<CardProps> = ({
@@ -39,6 +40,8 @@ const Card: React.FC<CardProps> = ({
     margin: 0,
     borderLeft: `4px solid ${theme.colors.accent1}`,
     paddingLeft: theme.spacing.medium,
+    display: 'flex',
+    alignItems: 'center',
   };
 
   const contentStyle: React.CSSProperties = {
@@ -49,7 +52,7 @@ const Card: React.FC<CardProps> = ({
     <div style={cardStyle}>
       {title && (
         <div style={headerStyle}>
-          <h3 style={titleStyle}>{title}</h3>
+          <div style={titleStyle}>{title}</div>
         </div>
       )}
       <div style={contentStyle}>

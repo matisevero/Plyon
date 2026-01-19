@@ -1,15 +1,20 @@
 
-import React, { useState, useMemo } from 'react';
-import type { Match, MatchSortByType, PlayerPerformance } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import type { Match, MatchSortByType, PublicProfile } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
 import { useData } from '../contexts/DataContext';
 import { ChevronIcon } from './icons/ChevronIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { TeamIcon } from './icons/TeamIcon';
-import { PlayerIcon } from './icons/PlayerIcon';
 import MatchFormIndicator from './MatchFormIndicator';
 import { ShareIcon } from './icons/ShareIcon';
-import { parseLocalDate, getColorForString } from '../utils/analytics';
+import { parseLocalDate, getColorForString, CONFEDERATIONS, WORLD_CUP_LOGO } from '../utils/analytics';
+import { TrophyIcon } from './icons/TrophyIcon';
+import { GlobeIcon } from './icons/GlobeIcon';
+import { FootballIcon } from './icons/FootballIcon';
+import { getFriendsList } from '../services/firebaseService';
+import FriendProfileModal from './modals/FriendProfileModal';
+import ShareMatchOptionsModal from './modals/ShareMatchOptionsModal';
 
 interface MatchCardProps {
   match: Match;
@@ -19,6 +24,10 @@ interface MatchCardProps {
   onEdit?: () => void;
   isReadOnly?: boolean;
   sortBy?: MatchSortByType;
+  forceExpanded?: boolean;
+  hideShareButton?: boolean;
+  hideCareerBanner?: boolean;
+  showFooterLogo?: boolean;
 }
 
 const resultAbbreviations: Record<'VICTORIA' | 'DERROTA' | 'EMPATE', string> = {
@@ -27,12 +36,104 @@ const resultAbbreviations: Record<'VICTORIA' | 'DERROTA' | 'EMPATE', string> = {
   EMPATE: 'E',
 };
 
-const MatchCard: React.FC<MatchCardProps> = ({ match, allMatches, allPlayers, onDelete, onEdit, isReadOnly = false, sortBy }) => {
+const MatchCard: React.FC<MatchCardProps> = ({ 
+    match, allMatches, allPlayers, onDelete, onEdit, 
+    isReadOnly = false, sortBy, forceExpanded = false, hideShareButton = false,
+    hideCareerBanner = false, showFooterLogo = false
+}) => {
   const { theme } = useTheme();
   const { playerProfile } = useData();
-  const { result, myGoals, myAssists, date, notes, tournament, matchMode } = match;
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [shareStatus, setShareStatus] = useState<'idle' | 'copying' | 'copied' | 'error'>('idle');
+  const { result, myGoals, myAssists, date, notes, tournament } = match;
+  const [isExpanded, setIsExpanded] = useState(forceExpanded);
+  
+  // Estado para controlar si la imagen falló al cargar
+  const [imgError, setImgError] = useState(false);
+
+  // Estados para modales
+  const [selectedFriend, setSelectedFriend] = useState<PublicProfile | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  // Manejo de clic en jugador
+  const handlePlayerClick = async (playerName: string) => {
+      // Si es solo lectura (ej: en la imagen generada), no hacemos nada
+      if (isReadOnly) return;
+
+      const mappedUid = playerProfile.playerMappings?.[playerName];
+      if (mappedUid) {
+          try {
+              // Obtener el perfil completo del amigo
+              const profiles = await getFriendsList([mappedUid]);
+              if (profiles.length > 0) {
+                  setSelectedFriend(profiles[0]);
+              }
+          } catch (e) {
+              console.error("Error al cargar perfil de amigo", e);
+          }
+      }
+  };
+
+  // --- DETECCIÓN DE MODO CARRERA POR FECHA ---
+  const careerInfo = useMemo(() => {
+      const matchTimestamp = parseLocalDate(date).getTime();
+
+      // 1. Active Qualifiers
+      if (playerProfile.activeWorldCupMode === 'qualifiers' && playerProfile.qualifiersProgress) {
+          const activeStart = parseLocalDate(playerProfile.qualifiersProgress.startDate || '').getTime();
+          if (matchTimestamp >= activeStart) {
+               return { 
+                   type: 'qualifiers', 
+                   label: `${playerProfile.qualifiersProgress.confederation} #${playerProfile.qualifiersProgress.campaignNumber}`,
+                   confederation: playerProfile.qualifiersProgress.confederation
+               };
+          }
+      }
+
+      // 2. Active World Cup
+      if (playerProfile.activeWorldCupMode === 'campaign' && playerProfile.worldCupProgress) {
+          const activeStart = parseLocalDate(playerProfile.worldCupProgress.startDate).getTime();
+          if (matchTimestamp >= activeStart) {
+               return { type: 'world-cup', label: `Mundial #${playerProfile.worldCupProgress.campaignNumber}` };
+          }
+      }
+
+      // 3. Historical Data
+      if (playerProfile.worldCupHistory) {
+          const wcHistoryMatch = playerProfile.worldCupHistory.find(h => {
+              const start = parseLocalDate(h.startDate).getTime();
+              const end = parseLocalDate(h.endDate).getTime();
+              return matchTimestamp >= start && matchTimestamp <= end;
+          });
+          if (wcHistoryMatch) return { type: 'world-cup', label: `Mundial #${wcHistoryMatch.campaignNumber}` };
+      }
+
+      if (playerProfile.qualifiersHistory) {
+          const qualHistoryMatch = playerProfile.qualifiersHistory.find(h => {
+              const start = parseLocalDate(h.startDate).getTime();
+              const end = parseLocalDate(h.endDate).getTime();
+              return matchTimestamp >= start && matchTimestamp <= end;
+          });
+          if (qualHistoryMatch) {
+              const confName = qualHistoryMatch.confederation;
+              return { 
+                  type: 'qualifiers', 
+                  label: `${confName} #${qualHistoryMatch.campaignNumber}`,
+                  confederation: confName
+              };
+          }
+      }
+
+      return null;
+  }, [date, playerProfile]);
+
+  const hasExplicitTournament = tournament && tournament.trim() !== '';
+  const isCareerMatch = !!careerInfo; 
+  const isWorldCup = isCareerMatch && careerInfo?.type === 'world-cup';
+  
+  // Resetear error de imagen si cambia el contexto
+  useEffect(() => {
+      setImgError(false);
+  }, [careerInfo]);
+  // ---------------------------------------------
 
   const formattedDate = useMemo(() => {
     const dateObj = parseLocalDate(date);
@@ -44,9 +145,9 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, allMatches, allPlayers, on
   }, [date]);
 
   const matchForm = useMemo(() => {
-    const contextualMatches = allMatches.filter(m => 
-      m.matchMode === match.matchMode && m.tournament === match.tournament
-    ).sort((a, b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime());
+    const contextualMatches = allMatches.filter(m => {
+        return m.tournament === match.tournament;
+    }).sort((a, b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime());
 
     const currentIndex = contextualMatches.findIndex(m => m.id === match.id);
     if (currentIndex < 0) return [];
@@ -55,60 +156,7 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, allMatches, allPlayers, on
     const formMatches = contextualMatches.slice(startIndex, currentIndex);
     
     return formMatches.map(m => m.result);
-  }, [match.id, match.matchMode, match.tournament, allMatches]);
-
-  const handleShare = async () => {
-    setShareStatus('copying');
-    
-    const matchYear = parseLocalDate(match.date).getFullYear();
-    const yearlyMatches = allMatches.filter(m => parseLocalDate(m.date).getFullYear() === matchYear);
-    
-    const yearlyWins = yearlyMatches.filter(m => m.result === 'VICTORIA').length;
-    const yearlyDraws = yearlyMatches.filter(m => m.result === 'EMPATE').length;
-    const yearlyLosses = yearlyMatches.filter(m => m.result === 'DERROTA').length;
-    const yearlyGoals = yearlyMatches.reduce((sum, m) => sum + m.myGoals, 0);
-    const yearlyAssists = yearlyMatches.reduce((sum, m) => sum + m.myAssists, 0);
-
-    const resultIcons = { VICTORIA: '✅', EMPATE: '🟰', DERROTA: '❌' };
-    const resultTextMap = {
-      VICTORIA: 'ganado',
-      DERROTA: 'perdido',
-      EMPATE: 'empatado'
-    };
-    const resultText = resultTextMap[match.result];
-
-    const textToCopy = `Partido ${resultText} ${resultIcons[match.result]}
-⚽️ ${match.myGoals}
-👟 ${match.myAssists}
-
-Acumulado
-✅ ${yearlyWins}
-🟰 ${yearlyDraws}
-❌ ${yearlyLosses}
-
-⚽️ ${yearlyGoals}
-👟 ${yearlyAssists}`;
-
-    try {
-      await navigator.clipboard.writeText(textToCopy);
-      setShareStatus('copied');
-    } catch (err) {
-      console.error('Failed to copy text: ', err);
-      setShareStatus('error');
-    } finally {
-      setTimeout(() => setShareStatus('idle'), 2000);
-    }
-  };
-  
-  const getShareButtonText = () => {
-    switch (shareStatus) {
-      case 'copying': return 'Copiando...';
-      case 'copied': return '¡Copiado!';
-      case 'error': return 'Error';
-      default: return 'Compartir Partido';
-    }
-  };
-
+  }, [match.id, match.tournament, allMatches]);
 
   const getResultStyle = (result: 'VICTORIA' | 'DERROTA' | 'EMPATE'): React.CSSProperties => {
     const baseStyle = styles.resultBadge;
@@ -163,7 +211,7 @@ Acumulado
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: `${theme.spacing.small} ${theme.spacing.large}`,
         borderTop: `1px solid ${theme.colors.border}`,
-        cursor: 'pointer',
+        cursor: forceExpanded ? 'default' : 'pointer', // Disable cursor if forced expanded
         backgroundColor: theme.colors.background,
         borderBottomLeftRadius: isExpanded ? 0 : theme.borderRadius.large,
         borderBottomRightRadius: isExpanded ? 0 : theme.borderRadius.large,
@@ -205,7 +253,11 @@ Acumulado
         opacity: 0.6,
     },
     cardBody: {
-      padding: theme.spacing.large, paddingTop: theme.spacing.medium,
+      padding: theme.spacing.large,
+      // Reduced padding top when forced expanded to minimize whitespace
+      paddingTop: forceExpanded ? '4px' : theme.spacing.medium,
+      // For static generation, ensure it's visible without animation delay
+      animation: forceExpanded ? 'none' : 'fadeIn 0.5s ease-in-out', 
     },
     actionsContainer: {
       display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
@@ -240,7 +292,12 @@ Acumulado
         minWidth: '130px',
         justifyContent: 'center',
     },
-    playersSection: { borderTop: `1px solid ${theme.colors.border}`, paddingTop: theme.spacing.large, marginTop: theme.spacing.large },
+    playersSection: { 
+        borderTop: `1px solid ${theme.colors.border}`, 
+        paddingTop: theme.spacing.large,
+        // Reduced margin top when forced expanded
+        marginTop: forceExpanded ? theme.spacing.small : theme.spacing.large,
+    },
     playersGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: theme.spacing.large },
     playerList: { listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: theme.spacing.small },
     playerListItem: {
@@ -249,7 +306,8 @@ Acumulado
         border: `1px solid ${theme.colors.border}`,
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        transition: 'border-color 0.2s ease',
     },
     playerName: {
         textOverflow: 'ellipsis',
@@ -269,48 +327,100 @@ Acumulado
         fontWeight: 'bold',
         color: theme.colors.accent1,
     },
+    linkedPlayerItem: {
+        borderColor: theme.colors.accent2,
+        backgroundColor: `${theme.colors.accent2}10`,
+        cursor: isReadOnly ? 'default' : 'pointer', // Disable pointer if read-only
+    },
     teamLabel: {
         fontSize: theme.typography.fontSize.small, fontWeight: 600, color: theme.colors.secondaryText,
         margin: `0 0 ${theme.spacing.small} 0`,
     },
     tournamentTag: {
-        backgroundColor: 'transparent',
-        border: '1px solid', // color is set inline
-        padding: `${theme.spacing.extraSmall} ${theme.spacing.small}`,
         borderRadius: theme.borderRadius.small,
+        padding: `${theme.spacing.extraSmall} ${theme.spacing.small}`,
         fontSize: theme.typography.fontSize.extraSmall,
-        fontWeight: 600,
+        fontWeight: 700,
         whiteSpace: 'nowrap',
         textOverflow: 'ellipsis',
         overflow: 'hidden',
-        maxWidth: '120px',
-    },
-    modeTag: {
-        padding: `${theme.spacing.extraSmall} ${theme.spacing.small}`,
-        borderRadius: theme.borderRadius.small,
-        fontSize: theme.typography.fontSize.extraSmall,
-        fontWeight: 600,
-        whiteSpace: 'nowrap',
+        maxWidth: '140px',
         display: 'flex',
         alignItems: 'center',
         gap: '4px',
+        border: '1px solid transparent',
     },
-    campaignBanner: {
-        backgroundColor: `${theme.colors.accent1}15`,
+    careerIconBadge: {
+        width: '24px',
+        height: '24px',
+        borderRadius: '6px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        marginRight: theme.spacing.extraSmall,
+    },
+    careerLogo: {
+        width: '100%',
+        height: '100%',
+        objectFit: 'contain'
+    },
+    campaignDetailContainer: {
+        backgroundColor: theme.colors.background,
         borderRadius: theme.borderRadius.medium,
-        padding: `${theme.spacing.small} ${theme.spacing.medium}`,
+        padding: theme.spacing.medium,
         marginBottom: theme.spacing.large,
         display: 'flex',
         alignItems: 'center',
-        gap: theme.spacing.small,
-        border: `1px solid ${theme.colors.accent1}30`,
+        gap: theme.spacing.medium,
+        border: `1px solid ${theme.colors.borderStrong}`,
     },
-    campaignText: {
-        fontSize: theme.typography.fontSize.extraSmall,
+    campaignIconContainer: {
+        width: '40px',
+        height: '40px',
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.surface,
+        border: `1px solid ${theme.colors.border}`,
+        flexShrink: 0,
+        padding: '6px',
+    },
+    campaignInfo: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '2px',
+    },
+    campaignLabel: {
+        fontSize: '0.65rem',
         fontWeight: 700,
-        color: theme.colors.primaryText,
+        color: theme.colors.secondaryText,
         textTransform: 'uppercase',
         letterSpacing: '0.05em',
+    },
+    campaignTitle: {
+        fontSize: '0.9rem',
+        fontWeight: 700,
+        color: theme.colors.primaryText,
+        margin: 0,
+    },
+    campaignInstance: {
+        fontSize: '0.8rem',
+        fontWeight: 600,
+        color: theme.colors.secondaryText
+    },
+    footerLogo: {
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: '6px',
+        opacity: 0.6,
+        fontSize: '0.8rem',
+        fontWeight: 600,
+        marginTop: theme.spacing.medium,
+        paddingTop: theme.spacing.medium,
+        borderTop: `1px dashed ${theme.colors.border}`,
     }
   };
   
@@ -325,170 +435,271 @@ Acumulado
     goalsBadgeStyle.opacity = 0.5;
   }
   
-  const shareButtonStyle = { ...styles.shareButton };
-  if (shareStatus === 'copied') {
-      shareButtonStyle.backgroundColor = `${theme.colors.win}20`;
-      shareButtonStyle.borderColor = theme.colors.win;
-      shareButtonStyle.color = theme.colors.win;
-  } else if (shareStatus === 'error') {
-      shareButtonStyle.backgroundColor = `${theme.colors.loss}20`;
-      shareButtonStyle.borderColor = theme.colors.loss;
-      shareButtonStyle.color = theme.colors.loss;
-  } else if (shareStatus === 'copying') {
-      shareButtonStyle.opacity = 0.7;
-  }
-
   const allTeamPlayers = useMemo(() => {
     const mainPlayer = { name: playerProfile.name || 'Yo', goals: match.myGoals, assists: match.myAssists };
     const otherTeammates = (match.myTeamPlayers || []).filter(p => p.name.toLowerCase() !== (playerProfile.name || '').toLowerCase());
     return [mainPlayer, ...otherTeammates];
   }, [playerProfile.name, match.myGoals, match.myAssists, match.myTeamPlayers]);
 
-  const renderTournamentTag = () => {
-      const iconSize = 14;
-      const isCareer = matchMode === 'world-cup' || matchMode === 'qualifiers';
+  const renderCareerBanner = () => {
+      // Don't render if explicitly hidden
+      if (hideCareerBanner) return null;
 
-      if (isCareer) {
-          const bgColor = matchMode === 'world-cup' ? theme.colors.accent1 : theme.colors.accent2;
-          const label = tournament || (matchMode === 'world-cup' ? 'Mundial' : 'Eliminatorias');
-          return (
-            <span style={{...styles.modeTag, backgroundColor: bgColor, color: theme.colors.textOnAccent}}>
-                <PlayerIcon size={iconSize} color={theme.colors.textOnAccent} />
-                <span>{label}</span>
-            </span>
-          );
+      // Only render full banner if it IS a career match detected by date AND there is no conflicting tournament name
+      if (!isCareerMatch || !careerInfo) return null;
+
+      // If user manually set a tournament name (e.g. "Fútbol Martes") even during World Cup, don't show the Career Banner inside details.
+      // This keeps the "Fútbol Martes" identity clean.
+      if (hasExplicitTournament) return null;
+
+      let logoUrl = '';
+      let color = theme.colors.primaryText;
+      let typeLabel = 'MODO CARRERA';
+
+      if (isWorldCup) {
+          logoUrl = WORLD_CUP_LOGO[theme.name];
+          color = theme.colors.accent1;
+          typeLabel = 'COPA DEL MUNDO';
+      } else if (careerInfo.confederation) {
+          // @ts-ignore
+          logoUrl = CONFEDERATIONS[careerInfo.confederation]?.logo[theme.name] || '';
+          color = theme.colors.accent2;
+          typeLabel = 'ELIMINATORIAS';
       }
 
-      if (tournament) {
-          return <span style={{...styles.tournamentTag, borderColor: getColorForString(tournament), color: getColorForString(tournament) }} title={tournament}>{tournament}</span>;
-      }
-      return null;
+      const DefaultIcon = isWorldCup ? TrophyIcon : GlobeIcon;
+
+      return (
+        <div style={styles.campaignDetailContainer}>
+            <div style={styles.campaignIconContainer}>
+               {logoUrl && !imgError ? (
+                   <img 
+                        src={logoUrl} 
+                        alt="Logo" 
+                        style={styles.careerLogo} 
+                        onError={() => setImgError(true)}
+                   />
+               ) : (
+                   <DefaultIcon size={24} color={color} />
+               )}
+            </div>
+            <div style={styles.campaignInfo}>
+                <span style={styles.campaignLabel}>{typeLabel}</span>
+                <h4 style={styles.campaignTitle}>{careerInfo.label}</h4>
+            </div>
+        </div>
+      );
   };
 
-  return (
-    <div style={styles.card}>
-      <div style={styles.mainInfoRow}>
-        <div style={styles.mainInfoLeft}>
-          <span style={resultStyle}>{resultAbbreviations[result]}</span>
-          <div style={styles.statsContainer}>
-            <div style={goalsBadgeStyle}>
-              <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>⚽️</span>
-              <span style={styles.statValue}>{myGoals}</span>
-            </div>
-            <div style={assistsBadgeStyle}>
-              <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>👟</span>
-              <span style={styles.statValue}>{myAssists}</span>
-            </div>
-            {match.goalDifference !== undefined && match.result !== 'EMPATE' && match.goalDifference !== 0 && (
-              <div style={getGoalDifferenceBadgeStyle(result)}>
-                <span style={{...styles.statValue, color: 'inherit'}}>
-                  {match.goalDifference > 0 ? `+${match.goalDifference}` : match.goalDifference}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-        <div style={styles.dateContainer}>
-            <span style={styles.dateDay}>{formattedDate.day}</span>
-            <span style={styles.dateMonth}>{formattedDate.month}</span>
-            <span style={styles.dateYear}>{formattedDate.year}</span>
-        </div>
-      </div>
-      <div style={styles.toggleRow} onClick={() => setIsExpanded(!isExpanded)} role="button" tabIndex={0} aria-expanded={isExpanded}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.medium, minWidth: 0 }}>
-            {renderTournamentTag()}
-            {matchForm.length > 0 && <MatchFormIndicator form={matchForm} />}
-        </div>
-        <ChevronIcon isExpanded={isExpanded} />
-      </div>
-      
-      {isExpanded && (
-        <div style={{ ...styles.cardBody, animation: 'fadeIn 0.5s ease-in-out' }}>
-            {notes && (
-              <div style={styles.notesSection}>
-                <h4 style={styles.sectionHeading}>Notas</h4>
-                <p style={styles.notesText}>{notes}</p>
-              </div>
-            )}
+  // Logic to determine what tag to display
+  let tagLabel = null;
+  let tagStyle = {};
 
-            {matchMode && matchMode !== 'regular' && (
-                <div style={styles.campaignBanner}>
-                    <PlayerIcon size={16} color={theme.colors.accent1} />
-                    <span style={styles.campaignText}>
-                        {matchMode === 'world-cup' ? 'MODO CARRERA: MUNDIAL' : 'MODO CARRERA: ELIMINATORIAS'}
-                        {tournament ? ` — ${tournament}` : ''}
+  if (hasExplicitTournament) {
+      // 1. Explicit Tournament (e.g., "Fútbol Martes")
+      // ALWAYS use Outline Style, regardless of date/career mode
+      tagLabel = tournament;
+      const color = getColorForString(tagLabel);
+      tagStyle = {
+          ...styles.tournamentTag,
+          backgroundColor: 'transparent',
+          border: `1px solid ${color}`,
+          color: color,
+      };
+  } else if (isCareerMatch && careerInfo) {
+      // 2. Implicit Career Match (No explicit name, but date matches career)
+      // Use Career Style (Solid background)
+      tagLabel = careerInfo.label;
+      if (!hideCareerBanner) {
+          const color = isWorldCup ? theme.colors.accent1 : theme.colors.accent2;
+          tagStyle = {
+              ...styles.tournamentTag,
+              backgroundColor: color,
+              borderColor: color,
+              color: theme.colors.textOnAccent
+          };
+      }
+  }
+
+  return (
+    <>
+        <div style={styles.card}>
+        <div style={styles.mainInfoRow}>
+            <div style={styles.mainInfoLeft}>
+            <span style={resultStyle}>{resultAbbreviations[result]}</span>
+            <div style={styles.statsContainer}>
+                <div style={goalsBadgeStyle}>
+                <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>⚽️</span>
+                <span style={styles.statValue}>{myGoals}</span>
+                </div>
+                <div style={assistsBadgeStyle}>
+                <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>👟</span>
+                <span style={styles.statValue}>{myAssists}</span>
+                </div>
+                {match.goalDifference !== undefined && match.result !== 'EMPATE' && match.goalDifference !== 0 && (
+                <div style={getGoalDifferenceBadgeStyle(result)}>
+                    <span style={{...styles.statValue, color: 'inherit'}}>
+                    {match.goalDifference > 0 ? `+${match.goalDifference}` : match.goalDifference}
                     </span>
                 </div>
-            )}
-
-            {(allTeamPlayers.length > 1 || match.opponentPlayers?.length) ? (
-              <div style={styles.playersSection}>
-                <h4 style={styles.sectionHeading}><TeamIcon /> Alineaciones</h4>
-                <div style={styles.playersGrid}>
-                  <div>
-                    <h5 style={styles.teamLabel}>Mi equipo</h5>
-                    <ul style={styles.playerList}>
-                        {allTeamPlayers.map((player, index) => (
-                            <li key={index} style={player.name.toLowerCase() === playerProfile.name?.toLowerCase() ? {...styles.playerListItem, ...styles.highlightedPlayer} : styles.playerListItem}>
-                              <span style={styles.playerName}>{player.name}</span>
-                              <div>
-                                {player.goals > 0 && <span style={styles.playerStatBadge}>⚽️ {player.goals}</span>}
-                                {player.assists > 0 && <span style={styles.playerStatBadge}>👟 {player.assists}</span>}
-                              </div>
-                            </li>
-                        ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <h5 style={styles.teamLabel}>Equipo rival</h5>
-                    <ul style={styles.playerList}>
-                        {match.opponentPlayers?.map((player, index) => (
-                          <li key={index} style={styles.playerListItem}>
-                              <span style={styles.playerName}>{player.name}</span>
-                              <div>
-                                {player.goals > 0 && <span style={styles.playerStatBadge}>⚽️ {player.goals}</span>}
-                                {player.assists > 0 && <span style={styles.playerStatBadge}>👟 {player.assists}</span>}
-                              </div>
-                          </li>
-                        ))}
-                        {(!match.opponentPlayers || match.opponentPlayers.length === 0) && <li style={{...styles.playerListItem, color: theme.colors.secondaryText, fontStyle: 'italic'}}>No hay jugadores</li>}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            
-            {!isReadOnly && (
-              <div style={styles.shareContainer}>
-                  <button
-                      onClick={handleShare}
-                      style={shareButtonStyle}
-                      disabled={shareStatus !== 'idle'}
-                  >
-                      <ShareIcon />
-                      <span>{getShareButtonText()}</span>
-                  </button>
-              </div>
-            )}
-             <div style={styles.actionsContainer}>
-                {!isReadOnly && (
-                  <>
-                    <button onClick={onEdit} style={{...styles.actionButton, border: `1px solid ${theme.colors.draw}`, color: theme.colors.secondaryText}} aria-label="Editar partido">EDITAR</button>
-                    <button onClick={onDelete} style={{...styles.actionButton, border: `1px solid ${theme.colors.loss}80`, color: theme.colors.loss}} aria-label="Eliminar partido">
-                      <TrashIcon />
-                    </button>
-                  </>
                 )}
-             </div>
+            </div>
+            </div>
+            <div style={styles.dateContainer}>
+                <span style={styles.dateDay}>{formattedDate.day}</span>
+                <span style={styles.dateMonth}>{formattedDate.month}</span>
+                <span style={styles.dateYear}>{formattedDate.year}</span>
+            </div>
         </div>
-      )}
-      <style>{`
-          @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-      `}</style>
-    </div>
+        <div 
+            style={styles.toggleRow} 
+            onClick={() => !forceExpanded && setIsExpanded(!isExpanded)} 
+            role="button" tabIndex={0} aria-expanded={isExpanded}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.medium, minWidth: 0, flex: 1 }}>
+                
+                {/* Show Career Icon if it matches the date criteria, acting as a small badge */}
+                {isCareerMatch && careerInfo && !hideCareerBanner && (
+                    <div 
+                        style={{
+                            ...styles.careerIconBadge, 
+                            backgroundColor: isWorldCup ? theme.colors.accent1 : theme.colors.accent2, 
+                            color: theme.colors.textOnAccent 
+                        }} 
+                        title={careerInfo.label}
+                    >
+                        {isWorldCup ? <TrophyIcon size={14} /> : <GlobeIcon size={14} />}
+                    </div>
+                )}
+
+                {tagLabel && (
+                    <span style={tagStyle} title={tagLabel}>
+                        {tagLabel}
+                    </span>
+                )}
+
+                {matchForm.length > 0 && <MatchFormIndicator form={matchForm} />}
+            </div>
+            {!forceExpanded && <ChevronIcon isExpanded={isExpanded} />}
+        </div>
+        
+        {isExpanded && (
+            <div style={styles.cardBody}>
+                {notes && (
+                <div style={styles.notesSection}>
+                    <h4 style={styles.sectionHeading}>Notas</h4>
+                    <p style={styles.notesText}>{notes}</p>
+                </div>
+                )}
+
+                {renderCareerBanner()}
+
+                {(allTeamPlayers.length > 1 || match.opponentPlayers?.length) ? (
+                <div style={styles.playersSection}>
+                    <h4 style={styles.sectionHeading}><TeamIcon /> Alineaciones</h4>
+                    <div style={styles.playersGrid}>
+                    <div>
+                        <h5 style={styles.teamLabel}>Mi equipo</h5>
+                        <ul style={styles.playerList}>
+                            {allTeamPlayers.map((player, index) => {
+                                const isLinked = !!playerProfile.playerMappings?.[player.name];
+                                const isMe = player.name.toLowerCase() === playerProfile.name?.toLowerCase();
+                                
+                                return (
+                                    <li 
+                                        key={index} 
+                                        style={{
+                                            ...styles.playerListItem, 
+                                            ...(isMe ? styles.highlightedPlayer : {}),
+                                            ...(isLinked ? styles.linkedPlayerItem : {})
+                                        }}
+                                        onClick={() => isLinked && handlePlayerClick(player.name)}
+                                        title={isLinked && !isReadOnly ? "Ver perfil de amigo" : ""}
+                                    >
+                                    <span style={styles.playerName}>
+                                        {player.name}
+                                    </span>
+                                    <div>
+                                        {player.goals > 0 && <span style={styles.playerStatBadge}>⚽️ {player.goals}</span>}
+                                        {player.assists > 0 && <span style={styles.playerStatBadge}>👟 {player.assists}</span>}
+                                    </div>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
+                    <div>
+                        <h5 style={styles.teamLabel}>Equipo rival</h5>
+                        <ul style={styles.playerList}>
+                            {match.opponentPlayers?.map((player, index) => {
+                            const isLinked = !!playerProfile.playerMappings?.[player.name];
+                            return (
+                                <li 
+                                    key={index} 
+                                    style={{
+                                        ...styles.playerListItem,
+                                        ...(isLinked ? styles.linkedPlayerItem : {})
+                                    }}
+                                    onClick={() => isLinked && handlePlayerClick(player.name)}
+                                    title={isLinked && !isReadOnly ? "Ver perfil de amigo" : ""}
+                                >
+                                    <span style={styles.playerName}>
+                                        {player.name}
+                                    </span>
+                                    <div>
+                                    {player.goals > 0 && <span style={styles.playerStatBadge}>⚽️ {player.goals}</span>}
+                                    {player.assists > 0 && <span style={styles.playerStatBadge}>👟 {player.assists}</span>}
+                                    </div>
+                                </li>
+                            );
+                            })}
+                            {(!match.opponentPlayers || match.opponentPlayers.length === 0) && <li style={{...styles.playerListItem, color: theme.colors.secondaryText, fontStyle: 'italic'}}>No hay jugadores</li>}
+                        </ul>
+                    </div>
+                    </div>
+                </div>
+                ) : null}
+                
+                {showFooterLogo && (
+                    <div style={styles.footerLogo}>
+                        <FootballIcon size={16} /> Plyon
+                    </div>
+                )}
+
+                {!isReadOnly && !hideShareButton && (
+                <div style={styles.shareContainer}>
+                    <button
+                        onClick={() => setIsShareModalOpen(true)}
+                        style={styles.shareButton}
+                    >
+                        <ShareIcon />
+                        <span>Compartir</span>
+                    </button>
+                </div>
+                )}
+                <div style={styles.actionsContainer}>
+                    {!isReadOnly && (
+                    <>
+                        <button onClick={onEdit} style={{...styles.actionButton, border: `1px solid ${theme.colors.draw}`, color: theme.colors.secondaryText}} aria-label="Editar partido">EDITAR</button>
+                        <button onClick={onDelete} style={{...styles.actionButton, border: `1px solid ${theme.colors.loss}80`, color: theme.colors.loss}} aria-label="Eliminar partido">
+                        <TrashIcon />
+                        </button>
+                    </>
+                    )}
+                </div>
+            </div>
+        )}
+        <style>{`
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(-10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+        `}</style>
+        </div>
+
+        {selectedFriend && <FriendProfileModal isOpen={!!selectedFriend} onClose={() => setSelectedFriend(null)} friend={selectedFriend} />}
+        <ShareMatchOptionsModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} match={match} allMatches={allMatches} />
+    </>
   );
 };
 

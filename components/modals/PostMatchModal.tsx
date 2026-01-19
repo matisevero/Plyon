@@ -451,7 +451,7 @@ const PostMatchModal: React.FC<PostMatchModalProps> = ({ match, matches, onClose
         .modal-scroll::-webkit-scrollbar { width: 6px; }
         .modal-scroll::-webkit-scrollbar-thumb { background-color: ${theme.colors.border}; border-radius: 3px; }
       `}</style>
-      <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+      <div style={{ position: 'fixed', left: '-9999px', top: 0, width: '1px', height: '1px', overflow: 'hidden' }}>
         <ShareableImageCard
             ref={shareableCardRef}
             match={match}
@@ -495,7 +495,7 @@ const PostMatchModal: React.FC<PostMatchModalProps> = ({ match, matches, onClose
                     {campaignContext && (
                         <div style={styles.campaignBanner}>
                             <div style={styles.campaignTitleContainer}>
-                                <PlayerIcon size={24} color={theme.colors.accent1} />
+                                <PlayerIcon size={20} color={theme.colors.accent1} />
                                 <h4 style={styles.campaignTitle}>MODO CARRERA</h4>
                             </div>
                             <p style={styles.campaignName}>{campaignContext.name}</p>

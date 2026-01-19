@@ -1,22 +1,22 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { auth, db } from '../firebase/config';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
   GoogleAuthProvider, 
   signOut, 
-  User,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updateProfile,
-  updateEmail,
-  updatePassword,
-  reauthenticateWithCredential,
-  EmailAuthProvider,
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  updateProfile, 
+  updateEmail, 
+  updatePassword, 
+  reauthenticateWithCredential, 
+  EmailAuthProvider, 
   sendPasswordResetEmail,
+  type User 
 } from 'firebase/auth';
-import { auth, db } from '../firebase/config';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 interface AuthContextType {
   user: User | null;
@@ -37,14 +37,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   // Helper to ensure user doc exists in Firestore with search fields
-  const syncUserToFirestore = async (firebaseUser: User, name?: string) => {
+  const syncUserToFirestore = async (firebaseUser: User, name?: string | null) => {
+    if (!db) return; // Protección si db no cargó
     const userRef = doc(db, 'users', firebaseUser.uid);
     const userSnap = await getDoc(userRef);
     
     const displayName = name || firebaseUser.displayName || 'Plyr';
     const email = firebaseUser.email || '';
 
-    // Only update if it doesn't exist or if essential search fields are missing
     if (!userSnap.exists()) {
       await setDoc(userRef, {
         name: displayName,
@@ -56,18 +56,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         friendRequestsSent: [],
         friendRequestsReceived: [],
         level: 1,
-        xp: 0
+        xp: 0,
+        careerPoints: 0 // Initialize for Global Rankings
       }, { merge: true });
     } else {
-        // Ensure search fields exist for old users
+        const data = userSnap.data();
         await setDoc(userRef, {
-            searchName: (userSnap.data().name || displayName).toLowerCase(),
-            searchEmail: (userSnap.data().email || email).toLowerCase(),
+            searchName: (data.name || displayName).toLowerCase(),
+            searchEmail: (data.email || email).toLowerCase(),
+            // Ensure points exist for old users so they appear in ranking
+            careerPoints: data.careerPoints ?? 0,
+            level: data.level ?? 1,
+            xp: data.xp ?? 0
         }, { merge: true });
     }
   };
 
   const signInWithGoogle = async () => {
+    if (!auth) throw new Error("Firebase no está configurado correctamente.");
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
@@ -79,11 +85,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const signUp = async (email: string, password: string, name: string) => {
+    if (!auth) throw new Error("Firebase no está configurado correctamente.");
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(userCredential.user, { displayName: name });
-      await syncUserToFirestore(userCredential.user, name);
-      setUser({ ...userCredential.user, displayName: name });
+      if (userCredential.user) {
+        await updateProfile(userCredential.user, { displayName: name });
+        await syncUserToFirestore(userCredential.user, name);
+        setUser({ ...userCredential.user, displayName: name });
+      }
     } catch (error) {
       console.error("Error signing up", error);
       throw error;
@@ -91,6 +100,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const signIn = async (email: string, password: string) => {
+    if (!auth) throw new Error("Firebase no está configurado correctamente.");
     try {
       const result = await signInWithEmailAndPassword(auth, email, password);
       await syncUserToFirestore(result.user);
@@ -101,6 +111,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logOut = async () => {
+    if (!auth) return;
     try {
       await signOut(auth);
     } catch (error) {
@@ -109,12 +120,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateUserEmail = async (newEmail: string, currentPassword: string) => {
-    if (!user || !user.email) throw new Error("No hay ningún usuario conectado.");
+    if (!user || !user.email || !auth || !db) throw new Error("No hay conexión con el servicio.");
     try {
         const credential = EmailAuthProvider.credential(user.email, currentPassword);
         await reauthenticateWithCredential(user, credential);
         await updateEmail(user, newEmail);
-        // Sync new email to firestore
         await setDoc(doc(db, 'users', user.uid), { 
             email: newEmail, 
             searchEmail: newEmail.toLowerCase() 
@@ -126,7 +136,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateUserPassword = async (newPassword: string, currentPassword: string) => {
-    if (!user || !user.email) throw new Error("No hay ningún usuario conectado.");
+    if (!user || !user.email || !auth) throw new Error("No hay ningún usuario conectado.");
     try {
         const credential = EmailAuthProvider.credential(user.email, currentPassword);
         await reauthenticateWithCredential(user, credential);
@@ -138,6 +148,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const resetPassword = async (email: string) => {
+    if (!auth) return;
     try {
       await sendPasswordResetEmail(auth, email);
     } catch (error) {
@@ -147,9 +158,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   useEffect(() => {
+    if (!auth) {
+        // Si auth falló al cargar en config.ts, terminamos la carga sin usuario
+        setLoading(false);
+        return;
+    }
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
+      // Sync on every load to ensure data consistency
+      if (currentUser) {
+          syncUserToFirestore(currentUser);
+      }
     });
 
     return () => unsubscribe();

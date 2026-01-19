@@ -1,22 +1,24 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Loader } from '../Loader';
-import { FirebaseError } from 'firebase/app';
 import { CloseIcon } from '../icons/CloseIcon';
+import { EyeIcon } from '../icons/EyeIcon';
+import { EyeOffIcon } from '../icons/EyeOffIcon';
 
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialMode?: 'login' | 'register';
 }
 
-const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
+const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, initialMode = 'login' }) => {
   const { theme } = useTheme();
   const { signUp, signIn, resetPassword } = useAuth();
 
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -24,6 +26,17 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  
+  // Password Visibility State
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Reset to initial mode when opened
+  useEffect(() => {
+      if (isOpen) {
+          setMode(initialMode);
+          setShowPassword(false);
+      }
+  }, [isOpen, initialMode]);
 
   if (!isOpen) {
     return null;
@@ -43,6 +56,12 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             return 'La contraseña debe tener al menos 6 caracteres.';
         case 'auth/too-many-requests':
             return 'Demasiados intentos. Por favor, inténtalo más tarde.';
+        case 'auth/network-request-failed':
+            return 'Error de conexión. Verifica tu internet. Si el problema persiste, puede ser un bloqueo de red.';
+        case 'auth/popup-closed-by-user':
+            return 'La ventana de inicio de sesión se cerró antes de completar.';
+        case 'auth/internal-error':
+            return 'Error interno de autenticación. Verifica que todos los campos estén completos.';
         default:
             return 'Ocurrió un error. Por favor, inténtalo de nuevo.';
     }
@@ -57,6 +76,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     setError('');
     setSuccessMessage('');
     setMode('login');
+    setShowPassword(false);
   };
   
   const handleSubmit = async (e: React.FormEvent) => {
@@ -75,11 +95,18 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
               await resetPassword(email);
               setSuccessMessage('Se ha enviado un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.');
           }
-      } catch (error) {
-          if (error instanceof FirebaseError) {
+      } catch (error: any) {
+          console.error("Auth Error:", error);
+          // Check for firebase error code without importing FirebaseError
+          if (error && typeof error === 'object' && 'code' in error) {
               setError(getErrorMessage(error.code));
           } else if (error instanceof Error) {
-              setError(error.message);
+              // Fallback for network errors that might not have a code property in some SDK versions
+              if (error.message.includes('network-request-failed')) {
+                  setError('Error de conexión. Verifica tu internet.');
+              } else {
+                  setError(error.message);
+              }
           } else {
               setError('Ocurrió un error inesperado.');
           }
@@ -92,6 +119,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
       setMode(prev => prev === 'login' ? 'register' : 'login');
       setError('');
       setSuccessMessage('');
+      setShowPassword(false);
   };
 
   const goToForgot = () => {
@@ -141,6 +169,31 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         color: theme.colors.primaryText, fontSize: theme.typography.fontSize.medium,
         outline: 'none', boxSizing: 'border-box',
     },
+    passwordWrapper: {
+        position: 'relative',
+        width: '100%'
+    },
+    inputPassword: {
+        width: '100%', padding: theme.spacing.medium, paddingRight: '45px', // Space for icon
+        backgroundColor: theme.colors.background,
+        border: `1px solid ${theme.colors.borderStrong}`, borderRadius: theme.borderRadius.medium,
+        color: theme.colors.primaryText, fontSize: theme.typography.fontSize.medium,
+        outline: 'none', boxSizing: 'border-box',
+    },
+    togglePasswordBtn: {
+        position: 'absolute',
+        right: '10px',
+        top: '50%',
+        transform: 'translateY(-50%)',
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        color: theme.colors.secondaryText,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '5px'
+    },
     button: {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       gap: theme.spacing.medium, padding: `${theme.spacing.medium} ${theme.spacing.large}`,
@@ -174,7 +227,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
       return 'Recuperar Contraseña';
   }
 
-  const modalJSX = (
+  return createPortal(
     <>
       <style>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -197,7 +250,24 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Correo electrónico" style={styles.input} required />
                     
                     {mode !== 'forgot' && (
-                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Contraseña" style={styles.input} required />
+                        <div style={styles.passwordWrapper}>
+                            <input 
+                                type={showPassword ? "text" : "password"} 
+                                value={password} 
+                                onChange={e => setPassword(e.target.value)} 
+                                placeholder="Contraseña" 
+                                style={styles.inputPassword} 
+                                required 
+                            />
+                            <button 
+                                type="button" 
+                                onClick={() => setShowPassword(!showPassword)}
+                                style={styles.togglePasswordBtn}
+                                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                            >
+                                {showPassword ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
+                            </button>
+                        </div>
                     )}
 
                     {mode === 'login' && (
@@ -226,10 +296,9 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
-
-  return createPortal(modalJSX, document.body);
 };
 
 export default LoginModal;

@@ -6,6 +6,8 @@ import { startChatSession } from '../services/geminiService';
 import { Loader } from '../components/Loader';
 import type { Chat } from '@google/genai';
 import AIInteractionCard from '../components/AIInteractionCard';
+import SectionHelp from '../components/common/SectionHelp';
+import { ChatBubbleIcon } from '../components/icons/ChatBubbleIcon';
 
 interface Message {
   role: 'user' | 'model';
@@ -23,6 +25,14 @@ const CoachPage: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 992);
+
+  const coachGuide = [
+      { 
+          title: "Chat con IA", 
+          content: "Este chat tiene acceso a tu historial de partidos. Pregúntale sobre tu rendimiento, pips para mejorar o análisis de rachas.", 
+          icon: <ChatBubbleIcon size={48} /> 
+      }
+  ];
 
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth >= 992);
@@ -100,6 +110,7 @@ const CoachPage: React.FC = () => {
       margin: 0, borderLeft: `4px solid ${theme.colors.accent2}`, paddingLeft: theme.spacing.medium,
       gridColumn: isDesktop ? '1 / -1' : 'auto',
       marginBottom: isDesktop ? 0 : theme.spacing.extraLarge,
+      display: 'flex', alignItems: 'center'
     },
     chatWindow: {
       height: '70vh',
@@ -152,7 +163,10 @@ const CoachPage: React.FC = () => {
 
   return (
     <main style={styles.container}>
-      <h2 style={styles.pageTitle}>Habla con tu Entrenador IA</h2>
+      <h2 style={styles.pageTitle}>
+          Habla con tu Entrenador IA
+          <SectionHelp steps={coachGuide} />
+      </h2>
       <div style={styles.chatWindow}>
         <div style={styles.messagesContainer}>
           {error && <p style={styles.errorText}>{error}</p>}

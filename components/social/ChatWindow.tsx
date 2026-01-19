@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { sendMessage, subscribeToMessages } from '../../services/firebaseService';
+import { moderateText } from '../../services/geminiService';
 import type { ChatMessage, PublicProfile } from '../../types';
 import { Loader } from '../Loader';
 
@@ -16,6 +17,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ friend }) => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    const [isSending, setIsSending] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -33,13 +36,28 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ friend }) => {
 
     const handleSend = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!input.trim() || !user) return;
+        if (!input.trim() || !user || isSending) return;
+        
+        setIsSending(true);
+        setError(null);
         
         try {
+            // 1. Moderate Content
+            const moderation = await moderateText(input.trim());
+            if (moderation.isToxic) {
+                setError(`Mensaje bloqueado: ${moderation.reason || 'Contenido inapropiado detectado.'}`);
+                setIsSending(false);
+                return;
+            }
+
+            // 2. Send Message
             await sendMessage(user.uid, friend.uid, input.trim());
             setInput('');
         } catch (error) {
             console.error("Error sending message", error);
+            setError("Error al enviar mensaje.");
+        } finally {
+            setIsSending(false);
         }
     };
 
@@ -84,12 +102,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ friend }) => {
             borderTop: `1px solid ${theme.colors.border}`,
             display: 'flex',
             gap: theme.spacing.small,
+            flexDirection: 'column' // Changed to handle error message
+        },
+        inputRow: {
+            display: 'flex',
+            gap: theme.spacing.small,
         },
         input: {
             flex: 1,
             padding: theme.spacing.small,
             borderRadius: theme.borderRadius.medium,
-            border: `1px solid ${theme.colors.borderStrong}`,
+            border: `1px solid ${error ? theme.colors.loss : theme.colors.borderStrong}`,
             backgroundColor: theme.colors.background,
             color: theme.colors.primaryText,
             fontSize: theme.typography.fontSize.medium,
@@ -130,6 +153,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ friend }) => {
             marginTop: '4px',
             textAlign: 'right',
             display: 'block',
+        },
+        errorText: {
+            color: theme.colors.loss,
+            fontSize: '0.8rem',
+            marginTop: '4px'
         }
     };
 
@@ -165,14 +193,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ friend }) => {
                 <div ref={messagesEndRef} />
             </div>
             <form onSubmit={handleSend} style={styles.inputArea}>
-                <input 
-                    type="text" 
-                    value={input} 
-                    onChange={e => setInput(e.target.value)} 
-                    style={styles.input}
-                    placeholder="Escribe un mensaje..."
-                />
-                <button type="submit" style={styles.sendButton}>Enviar</button>
+                <div style={styles.inputRow}>
+                    <input 
+                        type="text" 
+                        value={input} 
+                        onChange={e => { setInput(e.target.value); setError(null); }} 
+                        style={styles.input}
+                        placeholder="Escribe un mensaje..."
+                        disabled={isSending}
+                    />
+                    <button type="submit" style={styles.sendButton} disabled={isSending}>
+                        {isSending ? <Loader /> : 'Enviar'}
+                    </button>
+                </div>
+                {error && <div style={styles.errorText}>{error}</div>}
             </form>
         </div>
     );

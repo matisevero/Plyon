@@ -24,6 +24,9 @@ import { TrendingUpIcon } from '../components/icons/TrendingUpIcon';
 import { InfoIcon } from '../components/icons/InfoIcon';
 import { ShareIcon } from '../components/icons/ShareIcon';
 import ShareViewModal from '../components/modals/ShareViewModal';
+import SectionHelp from '../components/common/SectionHelp';
+import { ClipboardIcon } from '../components/icons/ClipboardIcon';
+import { CalendarIcon } from '../components/icons/CalendarIcon';
 
 type WidgetId = 'summary' | 'contributionMetrics' | 'streaks' | 'calendar' | 'historical' | 'seasonalComparison' | 'momentum' | 'ai';
 
@@ -38,31 +41,44 @@ const StatsPage: React.FC = () => {
   const [highlights, setHighlights] = useState<AIHighlight[]>([]);
   const [isGeneratingHighlights, setIsGeneratingHighlights] = useState(false);
   const [highlightsError, setHighlightsError] = useState<string | null>(null);
-  
-  // Disable tutorial auto-open in share mode
   const [isTutorialOpen, setIsTutorialOpen] = useState(!isTutorialSeen && !isShareMode);
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  
+  // Sync tutorial state
+  useEffect(() => {
+      if (isTutorialSeen) setIsTutorialOpen(false);
+  }, [isTutorialSeen]);
 
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [coachingInsight, setCoachingInsight] = useState<CoachingInsight | null>(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
   const [insightError, setInsightError] = useState<string | null>(null);
 
   const tutorialSteps = [
     {
-        title: 'Panel de ESTADÍSTICAS',
-        content: 'Una visión completa de tu rendimiento. Desde tu moral actual hasta comparaciones anuales detalladas.',
+        title: 'Tu identidad como jugador',
+        content: 'Más allá de los números, aquí descubrirás qué tipo de jugador eres. ¿Eres constante? ¿Apareces en momentos clave? ¿Mejoras cada año?',
         icon: <BarChartIcon size={48} />,
     },
     {
-        title: 'Explora tus datos',
-        content: 'Cada tarjeta es interactiva. Analiza tus rachas, mide tu consistencia y revisa tu actividad partido a partido.',
+        title: 'Análisis avanzado',
+        content: 'Desde mapas de calor de actividad hasta índices de consistencia avanzados. Entiende tus rachas y detecta patrones en tu juego.',
         icon: <TrendingUpIcon size={48} />,
     },
     {
-        title: 'Análisis Inteligente',
-        content: 'Usa la IA para detectar tus mejores momentos (Highlights) y recibir consejos tácticos de tu entrenador virtual.',
+        title: 'IA Deportiva',
+        content: 'Usa nuestra Inteligencia Artificial para recibir feedback táctico personalizado y revivir tus Highlights más memorables.',
         icon: <SparklesIcon size={48} />,
     }
+  ];
+
+  const historicalGuide = [
+      { title: "Desglose Mensual", content: "Profundiza en tus datos. Despliega cada año para ver tu rendimiento mes a mes.", icon: <CalendarIcon size={48} /> },
+      { title: "Detalle de Partidos", content: "Al expandir un mes, verás la lista de partidos jugados con sus estadísticas individuales.", icon: <ClipboardIcon size={48} /> }
+  ];
+
+  const aiGuide = [
+      { title: "Highlights", content: "La IA analiza tus partidos recientes para encontrar tus mejores actuaciones y explicarte por qué fuiste clave.", icon: <SparklesIcon size={48} /> },
+      { title: "Coach Virtual", content: "Recibe un consejo táctico basado en tus tendencias recientes. Descubre qué estás haciendo bien y qué puedes mejorar.", icon: <ChatBubbleIcon size={48} /> }
   ];
 
   useEffect(() => {
@@ -97,9 +113,7 @@ const StatsPage: React.FC = () => {
       const populatedHighlights = result.map(h => ({ ...h, match: matches.find(m => m.id === h.matchId)! })).filter(h => h.match);
       setHighlights(populatedHighlights);
       await addAIInteraction('highlight_analysis', populatedHighlights);
-    } catch (err: any) { 
-        setHighlightsError(err.message || "Error al generar el análisis."); 
-    }
+    } catch (err: any) { setHighlightsError(err.message || "Error al generar el análisis."); }
     finally { setIsGeneratingHighlights(false); }
   }, [matches, addAIInteraction, checkAILimit]);
 
@@ -111,14 +125,12 @@ const StatsPage: React.FC = () => {
         const result = await generateCoachingInsight(matches);
         setCoachingInsight(result);
         await addAIInteraction('coach_insight', result);
-    } catch (err: any) { 
-        setInsightError(err.message || "Error al generar la perspectiva."); 
-    }
+    } catch (err: any) { setInsightError(err.message || "Error al generar la perspectiva."); }
     finally { setIsGeneratingInsight(false); }
   }, [matches, addAIInteraction, checkAILimit]);
 
   const aiWidget = (
-    <Card title="Análisis con IA">
+    <Card title={<>Análisis con IA <SectionHelp steps={aiGuide} /></>}>
       {highlights.length === 0 && !isGeneratingHighlights && (
         <div style={{ textAlign: 'center' }}>
           <p style={{ color: theme.colors.secondaryText, margin: `0 0 ${theme.spacing.large} 0`, lineHeight: 1.6 }}>Descubre tus partidos más determinantes.</p>
@@ -131,7 +143,6 @@ const StatsPage: React.FC = () => {
       {isGeneratingHighlights && <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', color: theme.colors.secondaryText, padding: theme.spacing.extraLarge }}><Loader /> <p>Analizando...</p></div>}
       {highlightsError && <p style={{ color: theme.colors.loss, textAlign: 'center', padding: theme.spacing.medium, backgroundColor: `${theme.colors.loss}1A`, borderRadius: theme.borderRadius.medium }}>{highlightsError}</p>}
       {highlights.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: theme.spacing.large }}>{highlights.map(h => <HighlightCard key={h.matchId} highlight={h} allMatches={matches} allPlayers={allPlayers} />)}</div>}
-
       <div style={{ borderTop: `1px solid ${theme.colors.border}`, marginTop: '1.5rem', paddingTop: '1.5rem' }}>
         <h4 style={{ margin: '0 0 1rem 0', textAlign: 'center', color: theme.colors.secondaryText, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}><ChatBubbleIcon size={20} /> Perspectiva del Entrenador</h4>
         {coachingInsight ? (
@@ -152,95 +163,57 @@ const StatsPage: React.FC = () => {
         {isGeneratingInsight && <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', color: theme.colors.secondaryText, padding: theme.spacing.large }}><Loader /> <p>Generando...</p></div>}
         {insightError && <p style={{ color: theme.colors.loss, textAlign: 'center', padding: theme.spacing.medium, backgroundColor: `${theme.colors.loss}1A`, borderRadius: theme.borderRadius.medium }}>{insightError}</p>}
       </div>
-      
       <div style={{ borderTop: `1px solid ${theme.colors.border}`, marginTop: '1.5rem', paddingTop: '1.5rem' }}>
         <ConsistencyWidget matches={matches} />
       </div>
     </Card>
   );
 
-  const widgetComponents: Record<WidgetId, React.ReactNode> = {
-    summary: <SummaryWidget matches={matches} />,
-    contributionMetrics: <ContributionMetricsWidget matches={matches} />,
-    streaks: <StreaksWidget matches={matches} />,
-    calendar: <ActivityCalendar matches={matches} />,
-    historical: <Card title="Desglose histórico"><HistoricalAnalysis matches={matches} /></Card>,
-    seasonalComparison: <Card title="Comparativa anual"><SeasonalComparison matches={matches} /></Card>,
-    momentum: <MomentumWidget matches={matches} />,
-    ai: aiWidget
+  const widgetComponents: Record<WidgetId, React.ReactNode> = { 
+      summary: <SummaryWidget matches={matches} />, 
+      contributionMetrics: <ContributionMetricsWidget matches={matches} />, 
+      streaks: <StreaksWidget matches={matches} />, 
+      calendar: <ActivityCalendar matches={matches} />, 
+      historical: <Card title={<>Desglose histórico <SectionHelp steps={historicalGuide} /></>}><HistoricalAnalysis matches={matches} /></Card>, 
+      seasonalComparison: <SeasonalComparison matches={matches} />, 
+      momentum: <MomentumWidget matches={matches} />, 
+      ai: aiWidget 
   };
 
   const styles: { [key: string]: React.CSSProperties } = {
     container: { maxWidth: '1600px', margin: '0 auto', padding: `${theme.spacing.extraLarge} ${theme.spacing.medium}`, display: 'flex', flexDirection: 'column', gap: theme.spacing.large },
-    pageTitle: { fontSize: theme.typography.fontSize.extraLarge, fontWeight: 700, color: theme.colors.primaryText, margin: 0, borderLeft: `4px solid ${theme.colors.accent2}`, paddingLeft: '1rem' },
-    header: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      gap: '1rem',
-    },
-    headerButtons: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: theme.spacing.small,
-    },
-    iconButton: {
-        background: 'none',
-        border: 'none',
-        cursor: 'pointer',
-        padding: 0,
-        display: 'flex',
-        alignItems: 'center',
-    },
-    contentContainer: {
-        overflow: 'hidden',
-    },
+    pageTitle: { fontSize: theme.typography.fontSize.extraLarge, fontWeight: 700, color: theme.colors.primaryText, margin: 0, borderLeft: `4px solid ${theme.colors.accent2}`, paddingLeft: '1rem', display: 'flex', alignItems: 'center' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' },
+    headerButtons: { display: 'flex', alignItems: 'center', gap: theme.spacing.small },
+    iconButton: { background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' },
+    contentContainer: { overflow: 'hidden' },
     dashboardList: { display: 'flex', flexDirection: 'column', gap: theme.spacing.large },
-    dashboardGrid: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-        gap: theme.spacing.large,
-        alignItems: 'start',
-    },
-    column: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: theme.spacing.large,
-    }
+    dashboardGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: theme.spacing.large, alignItems: 'start' },
+    column: { display: 'flex', flexDirection: 'column', gap: theme.spacing.large }
   };
 
   return (
     <>
-      <TutorialModal 
-          isOpen={isTutorialOpen}
-          onClose={(dontShowAgain) => {
-              setIsTutorialOpen(false);
-              if(dontShowAgain) markTutorialAsSeen();
-          }}
-          steps={tutorialSteps}
-      />
-      <ShareViewModal 
-        isOpen={isShareModalOpen} 
-        onClose={() => setIsShareModalOpen(false)} 
-        page="stats"
-      />
+      <TutorialModal isOpen={isTutorialOpen} onClose={(dontShowAgain) => { setIsTutorialOpen(false); if(dontShowAgain) markTutorialAsSeen(); }} steps={tutorialSteps} />
+      <ShareViewModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} page="stats" />
       <main style={isDesktop ? styles.container : {...styles.container, maxWidth: '800px'}}>
         <div style={isDesktop ? styles.header : {...styles.header, flexDirection: 'column', alignItems: 'flex-start' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.medium }}>
-                <h2 style={styles.pageTitle}>Estadísticas</h2>
+                <h2 style={styles.pageTitle}>
+                    Estadísticas
+                    <SectionHelp steps={[
+                        { title: 'Estadísticas', content: 'Tu centro de mando. Aquí tienes todas las métricas que definen tu rendimiento.', icon: <BarChartIcon size={48} /> },
+                        { title: 'Filtros', content: 'Usa los filtros de año dentro de cada tarjeta para ver datos específicos de una temporada.', icon: <InfoIcon size={48} /> }
+                    ]} />
+                </h2>
                 {!isShareMode && (
                     <div style={styles.headerButtons}>
-                      <button onClick={() => setIsShareModalOpen(true)} style={styles.iconButton} aria-label="Compartir vista">
-                          <ShareIcon color={theme.colors.secondaryText} size={20} />
-                      </button>
-                      <button onClick={() => setIsTutorialOpen(true)} style={styles.iconButton} aria-label="Mostrar guía">
-                          <InfoIcon color={theme.colors.secondaryText} size={20}/>
-                      </button>
+                      <button onClick={() => setIsShareModalOpen(true)} style={styles.iconButton} aria-label="Compartir vista"><ShareIcon color={theme.colors.secondaryText} size={20} /></button>
+                      <button onClick={() => setIsTutorialOpen(true)} style={styles.iconButton} aria-label="Mostrar guía"><InfoIcon color={theme.colors.secondaryText} size={20}/></button>
                     </div>
                 )}
             </div>
         </div>
-        
         <div style={styles.contentContainer}>
             <div>
                 {isDesktop ? (
@@ -250,9 +223,7 @@ const StatsPage: React.FC = () => {
                         <div style={styles.column}>{widgetComponents.calendar}{widgetComponents.historical}{widgetComponents.ai}</div>
                     </div>
                 ) : (
-                <div style={styles.dashboardList}>
-                    {WIDGET_ORDER.map(id => <div key={id}>{widgetComponents[id]}</div>)}
-                </div>
+                <div style={styles.dashboardList}>{WIDGET_ORDER.map(id => <div key={id}>{widgetComponents[id]}</div>)}</div>
                 )}
             </div>
         </div>

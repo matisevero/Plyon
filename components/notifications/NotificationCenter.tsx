@@ -1,268 +1,487 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useData } from '../../contexts/DataContext';
 import { CloseIcon } from '../icons/CloseIcon';
-import type { Notification, Match } from '../../types';
+import { TrashIcon } from '../icons/TrashIcon';
+import { UserIcon } from '../icons/UserIcon';
+import { StarIcon } from '../icons/StarIcon';
+import { BellIcon } from '../icons/BellIcon';
+import { SparklesIcon } from '../icons/SparklesIcon';
+import { ChevronIcon } from '../icons/ChevronIcon';
+import { CheckIcon } from '../icons/CheckIcon';
+import { LockerRoomIcon } from '../icons/LockerRoomIcon';
+import type { Notification, FriendRequest, PendingMatch } from '../../types';
 import { parseLocalDate } from '../../utils/analytics';
+import SegmentedControl from '../common/SegmentedControl';
+
+// --- Utility: Time Grouping ---
+type TimeGroup = 'today' | 'week' | 'month' | 'year' | 'older';
+
+const getTimeGroup = (dateStr: string): TimeGroup => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    
+    // Reset hours to compare dates purely
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const n = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    const diffTime = n.getTime() - d.getTime();
+    const diffDays = diffTime / (1000 * 3600 * 24);
+
+    if (diffDays < 1) return 'today';
+    if (diffDays < 7) return 'week';
+    if (date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()) return 'month';
+    if (date.getFullYear() === now.getFullYear()) return 'year';
+    return 'older';
+};
+
+const getGroupLabel = (group: TimeGroup): string => {
+    switch (group) {
+        case 'today': return 'Hoy';
+        case 'week': return 'Esta Semana';
+        case 'month': return 'Este Mes';
+        case 'year': return 'Este Año';
+        case 'older': return 'Antiguos';
+    }
+};
+
+// --- Components ---
+
+const NotificationGroup: React.FC<{ 
+    groupKey: TimeGroup;
+    items: any[]; 
+    renderItem: (item: any) => React.ReactNode;
+    theme: any;
+}> = ({ groupKey, items, renderItem, theme }) => {
+    // Default open only for Today and This Week
+    const [isOpen, setIsOpen] = useState(groupKey === 'today' || groupKey === 'week');
+
+    if (items.length === 0) return null;
+
+    const styles: { [key: string]: React.CSSProperties } = {
+        groupContainer: {
+            marginBottom: theme.spacing.medium,
+        },
+        groupHeader: {
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: `${theme.spacing.small} 0`,
+            cursor: 'pointer',
+            userSelect: 'none',
+            borderBottom: isOpen ? 'none' : `1px solid ${theme.colors.border}`,
+            marginBottom: isOpen ? theme.spacing.small : 0,
+        },
+        groupTitle: {
+            fontSize: '0.8rem',
+            fontWeight: 800,
+            color: theme.colors.secondaryText,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            margin: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+        },
+        countBadge: {
+            backgroundColor: theme.colors.border,
+            color: theme.colors.primaryText,
+            borderRadius: '10px',
+            padding: '2px 6px',
+            fontSize: '0.7rem',
+            fontWeight: 600
+        },
+        chevron: {
+            transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s ease',
+            color: theme.colors.secondaryText,
+        },
+        listContainer: {
+            display: isOpen ? 'flex' : 'none',
+            flexDirection: 'column',
+            gap: '8px',
+            animation: 'fadeIn 0.2s ease-out',
+        },
+    };
+
+    return (
+        <div style={styles.groupContainer}>
+            <div style={styles.groupHeader} onClick={() => setIsOpen(!isOpen)}>
+                <h5 style={styles.groupTitle}>
+                    {getGroupLabel(groupKey)}
+                    <span style={styles.countBadge}>{items.length}</span>
+                </h5>
+                <div style={styles.chevron}>
+                    <ChevronIcon size={16} color="currentColor" />
+                </div>
+            </div>
+            <div style={styles.listContainer}>
+                {items.map(renderItem)}
+            </div>
+        </div>
+    );
+};
 
 const NotificationCenter: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isOpen, onClose }) => {
   const { theme } = useTheme();
-  const { notifications, matches } = useData();
+  const { 
+    notifications, 
+    pendingMatches, 
+    friendRequests, 
+    confirmPendingMatch, 
+    respondToFriendRequest, 
+    markNotificationsAsRead,
+    deleteNotification
+  } = useData();
 
-  const lastMatchWithin48h = useMemo(() => {
-    if (matches.length === 0) {
-      return null;
+  const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
+
+  // Lock body and html scroll when open to prevent background scrolling
+  useEffect(() => {
+    if (isOpen) {
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+    } else {
+        document.body.style.overflow = '';
+        document.documentElement.style.overflow = '';
     }
-    const sortedMatches = [...matches].sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime());
-    const lastMatch = sortedMatches[0];
-    const matchDate = parseLocalDate(lastMatch.date);
-    const now = new Date();
-    const hoursDiff = (now.getTime() - matchDate.getTime()) / (1000 * 60 * 60);
+    return () => { 
+        document.body.style.overflow = ''; 
+        document.documentElement.style.overflow = '';
+    };
+  }, [isOpen]);
 
-    if (hoursDiff <= 48) {
-      return lastMatch;
-    }
+  // Unified sorting function
+  const sortByDateDesc = (a: any, b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime();
 
-    return null;
-  }, [matches]);
+  // Combine Pending Items
+  const pendingItems = useMemo(() => {
+      const requests = friendRequests.map(r => ({ ...r, type: 'friend_request', date: r.createdAt }));
+      const matches = pendingMatches.map(m => ({ ...m, type: 'pending_match', date: m.createdAt }));
+      return [...requests, ...matches].sort(sortByDateDesc);
+  }, [friendRequests, pendingMatches]);
 
-  const groupedNotifications = useMemo(() => {
-      const groups = {
-          today: [] as Notification[],
-          week: [] as Notification[],
-          month: [] as Notification[],
-          older: [] as Notification[]
-      };
-
-      const now = new Date();
-      // Reset time to midnight for comparison
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const startOfWeek = new Date(startOfToday.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-      // Sort by date descending first
-      const sortedNotifs = [...notifications].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-      sortedNotifs.forEach(n => {
-          const date = new Date(n.date);
-          if (date >= startOfToday) {
-              groups.today.push(n);
-          } else if (date >= startOfWeek) {
-              groups.week.push(n);
-          } else if (date >= startOfMonth) {
-              groups.month.push(n);
-          } else {
-              groups.older.push(n);
-          }
-      });
-
-      return groups;
+  const sortedHistory = useMemo(() => {
+      return [...notifications].sort(sortByDateDesc);
   }, [notifications]);
-  
-  const resultColors = {
-      VICTORIA: { border: theme.colors.win, text: theme.colors.win },
-      DERROTA: { border: theme.colors.loss, text: theme.colors.loss },
-      EMPATE: { border: theme.colors.draw, text: theme.colors.draw }
+
+  const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
+
+  // Grouping Logic Generic
+  const groupItems = (items: any[]) => {
+      const groups: Record<TimeGroup, any[]> = { today: [], week: [], month: [], year: [], older: [] };
+      items.forEach(item => {
+          const group = getTimeGroup(item.date || item.createdAt);
+          groups[group].push(item);
+      });
+      return groups;
   };
+
+  const groupedPending = useMemo(() => groupItems(pendingItems), [pendingItems]);
+  const groupedHistory = useMemo(() => groupItems(sortedHistory), [sortedHistory]);
+
+  const pendingCount = pendingItems.length;
+
+  // Auto-switch tab logic only on first open
+  useEffect(() => {
+      if (isOpen) {
+          if (pendingCount > 0) setActiveTab('pending');
+          else setActiveTab('history');
+      }
+  }, [isOpen]); 
 
   const styles: { [key: string]: React.CSSProperties } = {
     backdrop: {
       position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      zIndex: 1998,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)', zIndex: 1998,
       animation: 'fadeIn 0.3s ease-out forwards',
+      backdropFilter: 'blur(3px)',
     },
     panel: {
-      position: 'fixed', top: 0, right: 0, width: 'clamp(280px, 85vw, 360px)', height: '100%',
-      background: theme.colors.surface,
-      zIndex: 1999,
+      position: 'fixed', top: 0, right: 0, width: 'clamp(300px, 90vw, 420px)', height: '100%',
+      background: theme.colors.surface, zIndex: 1999,
       display: 'flex', flexDirection: 'column',
       boxShadow: theme.shadows.large,
-      animation: 'slideIn 0.3s ease-out forwards',
+      animation: 'slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
     },
     header: {
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: '0.5rem 1rem', borderBottom: `1px solid ${theme.colors.border}`,
-      height: '65px', flexShrink: 0,
+      display: 'flex', flexDirection: 'column', gap: '16px',
+      padding: '1.5rem', borderBottom: `1px solid ${theme.colors.border}`,
+      flexShrink: 0,
+      backgroundColor: theme.colors.surface,
     },
-    title: {
-      fontSize: theme.typography.fontSize.large, fontWeight: 700,
-      color: theme.colors.primaryText, margin: 0,
+    topRow: {
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%'
     },
-    iconButton: {
-        background: 'none', border: 'none', color: theme.colors.secondaryText,
-        cursor: 'pointer', padding: theme.spacing.small,
+    titleContainer: {
+        display: 'flex', alignItems: 'center', gap: '10px'
     },
-    content: {
-      flex: 1, overflowY: 'auto', padding: theme.spacing.medium,
+    title: { 
+        fontSize: '1.25rem', // Consistent with app header
+        fontWeight: 700, 
+        color: theme.colors.primaryText, 
+        margin: 0, 
+        fontFamily: theme.typography.fontFamily,
+        lineHeight: 1.2
     },
-    emptyState: {
-        textAlign: 'center', color: theme.colors.secondaryText,
-        padding: theme.spacing.extraLarge,
+    lockerRoomText: {
+        background: `linear-gradient(90deg, ${theme.colors.primaryText}, ${theme.colors.secondaryText})`,
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
     },
-    groupTitle: {
-        fontSize: '0.75rem',
-        fontWeight: 700,
-        color: theme.colors.secondaryText,
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em',
-        margin: `${theme.spacing.medium} 0 ${theme.spacing.small} 0`,
+    content: { flex: 1, overflowY: 'auto', padding: '1.5rem', backgroundColor: theme.colors.background },
+    
+    // Actions Bar in History
+    actionBar: {
+        display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
+        marginBottom: theme.spacing.medium,
+        paddingBottom: theme.spacing.small,
+        borderBottom: `1px solid ${theme.colors.border}`,
+        minHeight: '24px' // Consistent height
     },
-    notificationList: {
-        listStyle: 'none', padding: 0, margin: 0,
-        display: 'flex', flexDirection: 'column', gap: theme.spacing.small,
+    markReadBtn: {
+        background: 'none', border: 'none', cursor: 'pointer',
+        fontSize: '0.75rem', fontWeight: 800, color: theme.colors.accent2,
+        textTransform: 'uppercase', letterSpacing: '0.05em',
+        display: 'flex', alignItems: 'center', gap: '6px',
+        padding: '4px 8px', borderRadius: '4px',
+        transition: 'background-color 0.2s',
     },
-    notificationItem: {
-        backgroundColor: theme.colors.background,
-        padding: theme.spacing.medium,
+    allReadText: {
+        fontSize: '0.75rem', fontWeight: 800, color: theme.colors.win,
+        textTransform: 'uppercase', letterSpacing: '0.05em',
+        display: 'flex', alignItems: 'center', gap: '6px',
+        padding: '4px 8px',
+        opacity: 0.8,
+        cursor: 'default'
+    },
+
+    // Card Styles
+    card: {
+        backgroundColor: theme.colors.surface, padding: '1.25rem',
+        borderRadius: '16px', border: `1px solid ${theme.colors.border}`,
+        position: 'relative', boxShadow: theme.shadows.small,
+        display: 'flex', flexDirection: 'column', gap: '10px'
+    },
+    compactCard: {
+        backgroundColor: theme.colors.surface,
+        padding: '12px 14px',
         borderRadius: theme.borderRadius.medium,
         border: `1px solid ${theme.colors.border}`,
+        position: 'relative',
         display: 'flex',
-        justifyContent: 'space-between',
         alignItems: 'flex-start',
-        gap: theme.spacing.medium,
+        gap: '12px',
+        transition: 'background-color 0.2s, opacity 0.2s, border-color 0.2s'
     },
-    notificationMessage: {
-        margin: 0, color: theme.colors.primaryText,
-        fontSize: theme.typography.fontSize.small,
-        lineHeight: 1.4,
-        flex: 1,
+    unreadIndicator: {
+        width: '6px', height: '6px', borderRadius: '50%',
+        backgroundColor: theme.colors.accent2,
+        marginTop: '4px'
     },
-    notificationDate: {
-        margin: 0,
-        fontSize: '0.7rem',
-        color: theme.colors.secondaryText,
-        whiteSpace: 'nowrap',
-        fontWeight: 600,
-        flexShrink: 0,
+    messageTitle: { fontSize: '0.9rem', fontWeight: 700, color: theme.colors.primaryText, margin: 0 },
+    messageBody: { fontSize: '0.85rem', color: theme.colors.secondaryText, margin: 0, lineHeight: 1.4 },
+    actionRow: { display: 'flex', gap: '8px', marginTop: '4px' },
+    actionBtn: {
+        flex: 1, padding: '8px', borderRadius: '8px', border: 'none',
+        fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
     },
-    lastMatchCard: {
-        marginBottom: theme.spacing.medium,
-        padding: theme.spacing.medium,
-        borderRadius: theme.borderRadius.medium,
-        border: `2px solid`,
-        backgroundColor: theme.colors.background,
+    acceptBtn: { backgroundColor: theme.colors.win, color: theme.colors.textOnAccent },
+    rejectBtn: { backgroundColor: 'transparent', color: theme.colors.loss, border: `1px solid ${theme.colors.loss}40` },
+    timeText: { fontSize: '0.65rem', color: theme.colors.secondaryText, whiteSpace: 'nowrap', marginTop: '2px' },
+    emptyState: {
+        textAlign: 'center', padding: '4rem 1rem', color: theme.colors.secondaryText,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem'
     },
-    lastMatchHeader: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: theme.spacing.medium,
-    },
-    lastMatchTitle: {
-        margin: 0,
-        fontWeight: 'bold',
-        fontSize: theme.typography.fontSize.small,
-        color: theme.colors.primaryText,
-    },
-    lastMatchDate: {
-        fontSize: theme.typography.fontSize.extraSmall,
-        color: theme.colors.secondaryText,
-    },
-    lastMatchStats: {
-        display: 'flex',
-        justifyContent: 'space-around',
+    statusCard: {
+        backgroundColor: `${theme.colors.accent2}10`,
+        border: `1px solid ${theme.colors.accent2}30`,
+        borderRadius: theme.borderRadius.large,
+        padding: '2rem',
         textAlign: 'center',
+        width: '100%',
+        boxSizing: 'border-box'
     },
-    statItem: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.25rem',
+    deleteBtnSmall: {
+        background: 'none', border: 'none', color: theme.colors.secondaryText,
+        cursor: 'pointer', padding: '4px', opacity: 0.5,
+        display: 'flex', alignItems: 'center'
     },
-    statValue: {
-        fontSize: '1.2rem',
-        fontWeight: 'bold',
-        color: theme.colors.primaryText,
-    },
-    statLabel: {
-        fontSize: '0.7rem',
-        color: theme.colors.secondaryText,
-        textTransform: 'uppercase',
-    }
   };
 
-  const renderNotificationGroup = (title: string, items: Notification[], dateFormat: 'time' | 'day' | 'full') => {
-      if (items.length === 0) return null;
+  const renderPendingItem = (item: any) => {
+      const isRequest = item.type === 'friend_request';
       return (
-          <>
-            <h5 style={styles.groupTitle}>{title}</h5>
-            <ul style={styles.notificationList}>
-                {items.map(notification => {
-                    const dateObj = new Date(notification.date);
-                    let dateString = '';
-                    if (dateFormat === 'time') {
-                        dateString = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    } else if (dateFormat === 'day') {
-                        dateString = dateObj.toLocaleDateString('es-ES', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-                    } else {
-                        dateString = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
-                    }
-
-                    return (
-                        <li key={notification.id} style={styles.notificationItem}>
-                            <p style={styles.notificationMessage}>{notification.message}</p>
-                            <span style={styles.notificationDate}>{dateString}</span>
-                        </li>
-                    );
-                })}
-            </ul>
-          </>
+          <div key={item.id} style={{...styles.card, borderColor: isRequest ? theme.colors.accent1 : theme.colors.accent2}}>
+              <div>
+                  <h4 style={styles.messageTitle}>
+                      {isRequest ? <><UserIcon size={14} /> Solicitud de Amistad</> : <><StarIcon size={14} /> Etiqueta en Partido</>}
+                  </h4>
+                  <p style={{...styles.messageBody, color: theme.colors.primaryText, marginTop: '4px'}}>
+                      {isRequest 
+                          ? <span><strong>{item.fromName}</strong> quiere conectar contigo.</span> 
+                          : <span><strong>{item.fromUserName}</strong> te etiquetó como {item.role === 'teammate' ? 'Compañero' : 'Rival'}.</span>
+                      }
+                  </p>
+                  {!isRequest && <span style={styles.timeText}>Partido del {parseLocalDate(item.matchData.date).toLocaleDateString()}</span>}
+              </div>
+              <div style={styles.actionRow}>
+                  <button style={{...styles.actionBtn, ...styles.acceptBtn}} onClick={() => isRequest ? respondToFriendRequest(item.id, 'accept') : confirmPendingMatch(item, 'accept')}>Confirmar</button>
+                  <button style={{...styles.actionBtn, ...styles.rejectBtn}} onClick={() => isRequest ? respondToFriendRequest(item.id, 'reject') : confirmPendingMatch(item, 'reject')}>Rechazar</button>
+              </div>
+          </div>
       );
   };
-  
+
+  const renderHistoryItem = (item: Notification) => {
+      const isFriendAccepted = item.type === 'friend_accepted';
+      const timeStr = new Date(item.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+      
+      // Icon mapping: Default to '📲' as requested for system/general notifications.
+      const icon = isFriendAccepted ? '🤝' : '📲';
+      
+      return (
+          <div key={item.id} style={{
+              ...styles.compactCard, 
+              borderLeft: isFriendAccepted ? `4px solid ${theme.colors.win}` : `1px solid ${theme.colors.border}`,
+              backgroundColor: theme.colors.surface,
+              // Reduced opacity for read items to ~30% visibility as requested ("un 10%" is usually interpreted as 90% transparent or 10% opacity, but 0.1 is too faint, 0.3 is legible but clearly disabled)
+              opacity: item.read ? 0.3 : 1, 
+          }}>
+              <div style={{
+                   display: 'flex', 
+                   flexDirection: 'column', 
+                   alignItems: 'center', 
+                   gap: '0px',
+                   minWidth: '24px',
+                   marginRight: '4px'
+               }}>
+                   <div style={{fontSize: '1.2rem', lineHeight: 1}}>
+                       {icon}
+                   </div>
+                   {/* Unread indicator below icon */}
+                   {!item.read && <div style={styles.unreadIndicator} />} 
+               </div>
+
+              <div style={{flex: 1}}>
+                  <p style={{...styles.messageBody, color: theme.colors.primaryText, fontWeight: item.read ? 400 : 600}}>{item.message}</p>
+              </div>
+              <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px'}}>
+                  <span style={styles.timeText}>{timeStr}</span>
+                  <button 
+                    style={styles.deleteBtnSmall} 
+                    onClick={(e) => { e.stopPropagation(); deleteNotification(item.id); }} 
+                    title="Eliminar del historial"
+                  >
+                      <TrashIcon size={12}/>
+                  </button>
+              </div>
+          </div>
+      );
+  };
+
+  const tabOptions = [
+      { label: `Pendientes${pendingCount > 0 ? ` (${pendingCount})` : ''}`, value: 'pending' },
+      { label: 'Notas', value: 'history' }
+  ];
+
+  const groupOrder: TimeGroup[] = ['today', 'week', 'month', 'year', 'older'];
+
   const modalJSX = (
       <>
         <style>{`
             @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
             @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+            .notif-scroll::-webkit-scrollbar { width: 6px; }
+            .notif-scroll::-webkit-scrollbar-thumb { background: ${theme.colors.borderStrong}; border-radius: 10px; }
         `}</style>
         <div style={styles.backdrop} onClick={onClose}></div>
         <div style={styles.panel}>
             <header style={styles.header}>
-                <h3 style={styles.title}>Notificaciones</h3>
-                <button style={styles.iconButton} onClick={onClose} aria-label="Cerrar notificaciones">
-                    <CloseIcon color={theme.colors.primaryText} size={28} />
-                </button>
+                <div style={styles.topRow}>
+                    <div style={styles.titleContainer}>
+                        <LockerRoomIcon size={24} color={theme.colors.primaryText} />
+                        <h3 style={styles.title}>
+                            <span style={styles.lockerRoomText}>Plyr</span> Locker Room
+                        </h3>
+                    </div>
+                    <button style={{background:'none', border:'none', cursor:'pointer', padding: '4px'}} onClick={onClose}>
+                        <CloseIcon color={theme.colors.primaryText} size={24} />
+                    </button>
+                </div>
+                <SegmentedControl 
+                    options={tabOptions}
+                    selectedValue={activeTab}
+                    onSelect={(val) => setActiveTab(val as any)}
+                />
             </header>
-            <main style={styles.content}>
-                {!lastMatchWithin48h && notifications.length === 0 ? (
-                    <div style={styles.emptyState}>No tienes notificaciones nuevas.</div>
-                ) : (
+
+            <main style={styles.content} className="notif-scroll">
+                
+                {activeTab === 'pending' && (
                     <>
-                        {lastMatchWithin48h && (
-                           <div style={{...styles.lastMatchCard, borderColor: resultColors[lastMatchWithin48h.result].border}}>
-                               <div style={styles.lastMatchHeader}>
-                                   <h4 style={styles.lastMatchTitle}>Resumen de tu último partido</h4>
-                                   <span style={styles.lastMatchDate}>
-                                       {parseLocalDate(lastMatchWithin48h.date).toLocaleDateString('es-ES', { weekday: 'long' })}
-                                   </span>
-                               </div>
-                               <div style={styles.lastMatchStats}>
-                                   <div style={styles.statItem}>
-                                       <span style={{...styles.statValue, color: resultColors[lastMatchWithin48h.result].text}}>
-                                           {lastMatchWithin48h.result}
-                                       </span>
-                                       <span style={styles.statLabel}>Resultado</span>
-                                   </div>
-                                   <div style={styles.statItem}>
-                                       <span style={styles.statValue}>⚽️ {lastMatchWithin48h.myGoals}</span>
-                                       <span style={styles.statLabel}>Goles</span>
-                                   </div>
-                                   <div style={styles.statItem}>
-                                       <span style={styles.statValue}>👟 {lastMatchWithin48h.myAssists}</span>
-                                       <span style={styles.statLabel}>Asistencias</span>
-                                   </div>
-                               </div>
-                           </div>
+                        {pendingItems.length === 0 ? (
+                            <div style={styles.emptyState}>
+                                <div style={styles.statusCard}>
+                                    <div style={{color: theme.colors.accent2, marginBottom: '8px'}}><SparklesIcon size={24} /></div>
+                                    <h4 style={{margin: '0 0 8px 0', color: theme.colors.accent2}}>Todo al día</h4>
+                                    <p style={{margin: 0, fontSize: '0.9rem', opacity: 0.8, lineHeight: 1.5}}>
+                                        No tienes solicitudes ni validaciones pendientes. ¡Estás listo para jugar!
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            groupOrder.map(group => (
+                                <NotificationGroup
+                                    key={group}
+                                    groupKey={group}
+                                    items={groupedPending[group]}
+                                    renderItem={renderPendingItem}
+                                    theme={theme}
+                                />
+                            ))
                         )}
-                        
-                        {renderNotificationGroup('Hoy', groupedNotifications.today, 'time')}
-                        {renderNotificationGroup('Esta Semana', groupedNotifications.week, 'day')}
-                        {renderNotificationGroup('Este Mes', groupedNotifications.month, 'full')}
-                        {renderNotificationGroup('Anteriores', groupedNotifications.older, 'full')}
                     </>
+                )}
+
+                {activeTab === 'history' && (
+                    <section>
+                        {sortedHistory.length > 0 && (
+                            <div style={styles.actionBar}>
+                                {unreadCount > 0 ? (
+                                    <button 
+                                        style={styles.markReadBtn} 
+                                        onClick={markNotificationsAsRead}
+                                    >
+                                        <CheckIcon size={14} /> Marcar como visto
+                                    </button>
+                                ) : (
+                                    <div style={styles.allReadText}>
+                                        <CheckIcon size={14} /> Todo visto
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {sortedHistory.length === 0 ? (
+                            <div style={styles.emptyState}>
+                                <p style={{fontStyle: 'italic'}}>No tienes notas en el historial.</p>
+                            </div>
+                        ) : (
+                            groupOrder.map(group => (
+                                <NotificationGroup
+                                    key={group}
+                                    groupKey={group}
+                                    items={groupedHistory[group]}
+                                    renderItem={renderHistoryItem}
+                                    theme={theme}
+                                />
+                            ))
+                        )}
+                    </section>
                 )}
             </main>
         </div>

@@ -76,6 +76,9 @@ const YearTabs: React.FC<YearTabsProps> = ({ years, selectedYear, onSelectYear, 
   const styles: { [key: string]: React.CSSProperties } = {
     container: {
       position: 'relative',
+      width: '100%',
+      maxWidth: '100%', // Enforce width constraint
+      overflow: 'hidden', // Contain scrolling area
     },
     scrollContainer: {
       display: 'flex',
@@ -84,10 +87,13 @@ const YearTabs: React.FC<YearTabsProps> = ({ years, selectedYear, onSelectYear, 
       msOverflowStyle: 'none',
       padding: `${theme.spacing.medium} 0`,
       justifyContent: 'center', // Center if not overflowing
+      width: '100%',
+      boxSizing: 'border-box',
     },
     buttonGroup: {
         display: 'inline-flex', // Use inline-flex to allow centering
         flexShrink: 0,
+        gap: '0.5rem', // Add consistent gap inside group
     },
     tabButton: {
       flexShrink: 0,

@@ -21,10 +21,12 @@ const ShareViewModal: React.FC<ShareViewModalProps> = ({ isOpen, onClose, page, 
   const { generateShareLink } = useData();
   const [status, setStatus] = useState<'idle' | 'generating' | 'ready' | 'copied' | 'error'>('idle');
   const [shareUrl, setShareUrl] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [isHovered, setIsHovered] = useState(false);
 
   const handleGenerateLink = async () => {
     setStatus('generating');
+    setErrorMessage('');
     try {
       const urlString = await generateShareLink(page, filters);
       setShareUrl(urlString);
@@ -38,9 +40,10 @@ const ShareViewModal: React.FC<ShareViewModalProps> = ({ isOpen, onClose, page, 
           // Si falla el auto-copy (Safari), nos quedamos en estado 'ready' para que el usuario copie manual
           console.log("Auto-copy blocked, waiting for user interaction");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create shareable link:', err);
       setStatus('error');
+      setErrorMessage(err.message || 'Error al generar el enlace.');
     }
   };
 
@@ -157,7 +160,7 @@ const ShareViewModal: React.FC<ShareViewModalProps> = ({ isOpen, onClose, page, 
                         {status === 'generating' ? <Loader /> : <ShareIcon />}
                         {status === 'generating' ? 'Generando...' : 'Generar Enlace'}
                     </button>
-                    {status === 'error' && <p style={{ ...styles.copiedMessage, color: theme.colors.loss }}>Error al generar el enlace. Intenta de nuevo.</p>}
+                    {status === 'error' && <p style={{ ...styles.copiedMessage, color: theme.colors.loss }}>{errorMessage || 'Error al generar el enlace. Intenta de nuevo.'}</p>}
                 </>
             ) : (
                 <div style={{ animation: 'fadeIn 0.3s ease' }}>
