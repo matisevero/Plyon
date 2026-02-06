@@ -1,94 +1,36 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    function isSignedIn() {
+    function isAuthenticated() {
       return request.auth != null;
     }
-    
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return request.auth.uid == userId;
     }
-
-    // --- COLECCIONES PÚBLICAS ---
-
-    // Actividades del Feed
-    match /activities/{activityId} {
-      allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      // Permitir editar o borrar si el usuario autenticado es el dueño del documento
-      allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    function isAdmin() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
-
-    // Usernames (Disponibilidad)
-    match /usernames/{username} {
-      allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
-    }
-
-    // Perfiles y Rankings
     match /users/{userId} {
-      allow read: if true; 
-      allow create, delete: if isOwner(userId);
-      allow update: if isOwner(userId) || 
-                    (isSignedIn() && 
-                     resource != null && 
-                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friends', 'playerMappings']));
-      
-      // Partidos (Públicos para rankings y duelos)
-      match /matches/{docId} { 
-        allow read: if true; 
-        allow write: if isOwner(userId); 
-      }
-      
-      // Notificaciones (Privadas)
-      match /notifications/{docId} { 
-        allow read, write: if isOwner(userId); 
-        allow create: if isSignedIn();
-      }
-      
-      // Otras subcolecciones privadas
-      match /goals/{docId} { allow read, write: if isOwner(userId); }
-      match /customAchievements/{docId} { allow read, write: if isOwner(userId); }
-      match /aiInteractions/{docId} { allow read, write: if isOwner(userId); }
-      match /tournaments/{docId} { allow read: if true; allow write: if isOwner(userId); }
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
     }
-
-    // --- COLECCIONES PRIVADAS / COMPARTIDAS ---
-
-    // Solicitudes de Amistad
-    match /friendRequests/{requestId} {
-      allow create: if isSignedIn() && request.resource.data.from == request.auth.uid;
-      allow read, update, delete: if isSignedIn() && (
-        (resource != null && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid)) ||
-        (resource == null)
-      );
+    match /matches/{matchId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+                      (resource.data.createdBy == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && 
+                      (resource.data.createdBy == request.auth.uid || isAdmin());
     }
-
-    // Partidos Pendientes (Etiquetas)
-    match /pendingMatches/{matchId} {
-      allow create: if isSignedIn() && request.resource.data.fromUserId == request.auth.uid;
-      allow read, update, delete: if isSignedIn() && (
-        (resource != null && (resource.data.toUserId == request.auth.uid || resource.data.fromUserId == request.auth.uid)) ||
-        (resource == null)
-      );
+    match /admin/{document=**} {
+      allow read, write: if isAdmin();
     }
-
-    // Chats
-    match /chats/{chatId} {
-      allow read, write: if isSignedIn() && (
-        chatId.matches(request.auth.uid + "_.*") || 
-        chatId.matches(".*_" + request.auth.uid)
-      );
-      match /messages/{messageId} {
-        allow read, write: if isSignedIn();
-      }
-    }
-
-    // Vistas Compartidas e Invitaciones
-    match /sharedViews/{viewId} { allow read: if true; allow create: if isSignedIn(); }
-    match /invitations/{code} { 
+  }
+}    match /invitations/{code} { 
       allow read: if true; 
       allow create, update: if isSignedIn();
     }
