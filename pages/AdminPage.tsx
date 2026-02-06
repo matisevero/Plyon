@@ -1,104 +1,75 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useData } from '../contexts/DataContext';
-import Card from '../components/common/Card';
-import { BarChartIcon } from '../components/icons/BarChartIcon';
-import { UsersIcon } from '../components/icons/UsersIcon';
-import { DatabaseIcon } from '../components/icons/DatabaseIcon';
+import { useAuth } from '../contexts/AuthContext';
+import { isUserAdmin } from '../services/userService';
+import UserManagement from '../components/admin/UserManagement';
 
 const AdminPage: React.FC = () => {
     const { theme } = useTheme();
     const { setCurrentPage } = useData();
-    const [activeTab, setActiveTab] = useState('dashboard');
+    const { user } = useAuth();
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'users'>('dashboard');
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [loading, setLoading] = useState(true);
 
-    const styles: { [key: string]: React.CSSProperties } = {
-        container: {
-            maxWidth: '1200px',
-            margin: '0 auto',
-            padding: theme.spacing.large,
-            color: theme.colors.primaryText
-        },
-        header: {
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: theme.spacing.extraLarge
-        },
-        title: {
-            fontSize: theme.typography.fontSize.extraLarge,
-            fontWeight: 800,
-            margin: 0
-        },
-        backBtn: {
-            padding: '8px 16px',
-            borderRadius: '8px',
-            border: `1px solid ${theme.colors.borderStrong}`,
-            background: 'transparent',
-            color: theme.colors.primaryText,
-            cursor: 'pointer'
-        },
-        grid: {
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-            gap: theme.spacing.large,
-            marginBottom: theme.spacing.extraLarge
-        },
-        metricCard: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: theme.spacing.medium,
-            padding: theme.spacing.large
-        },
-        metricValue: {
-            fontSize: '2.5rem',
-            fontWeight: 900,
-            lineHeight: 1
-        },
-        metricLabel: {
-            fontSize: '0.9rem',
-            color: theme.colors.secondaryText,
-            textTransform: 'uppercase'
-        }
+    useEffect(() => {
+        const checkAdmin = async () => {
+            if (!user) {
+                setCurrentPage('landing');
+                return;
+            }
+            const adminStatus = await isUserAdmin(user.uid);
+            setIsAdmin(adminStatus);
+            if (!adminStatus) {
+                alert('No tienes permisos de admin');
+                setCurrentPage('recorder');
+            }
+            setLoading(false);
+        };
+        checkAdmin();
+    }, [user, setCurrentPage]);
+
+    if (loading) {
+        return <div style={{padding: '40px', textAlign: 'center', color: '#fff'}}>Verificando permisos...</div>;
+    }
+
+    if (!isAdmin) return null;
+
+    const styles = {
+        container: { maxWidth: '1200px', margin: '0 auto', padding: '20px', color: '#fff' },
+        header: { display: 'flex', justifyContent: 'space-between', marginBottom: '30px' },
+        tabs: { display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '2px solid #333' },
+        tab: { padding: '10px 20px', background: 'transparent', border: 'none', color: '#888', cursor: 'pointer' },
+        activeTab: { color: '#00D9FF', borderBottom: '3px solid #00D9FF' }
     };
-
-    // Mock Data for MVP - In real app, fetch from Firebase Admin SDK or specific collection
-    const metrics = [
-        { label: 'Usuarios Totales', value: '1,240', icon: <UsersIcon size={32} color={theme.colors.accent1} /> },
-        { label: 'Partidos Registrados', value: '15.4k', icon: <DatabaseIcon size={32} color={theme.colors.accent2} /> },
-        { label: 'Uso de IA (Mes)', value: '3,502', icon: <BarChartIcon size={32} color={theme.colors.accent3} /> },
-    ];
 
     return (
         <div style={styles.container}>
-            <header style={styles.header}>
-                <h1 style={styles.title}>Panel de Control</h1>
-                <button style={styles.backBtn} onClick={() => setCurrentPage('settings')}>
-                    Volver a App
+            <div style={styles.header}>
+                <h1>Panel de Administración</h1>
+                <button onClick={() => setCurrentPage('settings')} style={{padding: '10px 20px', borderRadius: '8px', background: '#333', color: '#fff', border: 'none', cursor: 'pointer'}}>
+                    Volver
                 </button>
-            </header>
-
-            <div style={styles.grid}>
-                {metrics.map((m, i) => (
-                    <Card key={i}>
-                        <div style={styles.metricCard}>
-                            <div>{m.icon}</div>
-                            <div>
-                                <div style={styles.metricValue}>{m.value}</div>
-                                <div style={styles.metricLabel}>{m.label}</div>
-                            </div>
-                        </div>
-                    </Card>
-                ))}
             </div>
 
-            <Card title="Actividad Reciente del Sistema">
-                <div style={{padding: theme.spacing.medium, color: theme.colors.secondaryText}}>
-                    <p>• Nuevo pico de usuarios registrados (ayer)</p>
-                    <p>• Base de datos optimizada automáticamente</p>
-                    <p>• 5 reportes de usuarios pendientes de revisión</p>
+            <div style={styles.tabs}>
+                <button style={{...styles.tab, ...(activeTab === 'dashboard' ? styles.activeTab : {})}} onClick={() => setActiveTab('dashboard')}>
+                    Dashboard
+                </button>
+                <button style={{...styles.tab, ...(activeTab === 'users' ? styles.activeTab : {})}} onClick={() => setActiveTab('users')}>
+                    Usuarios
+                </button>
+            </div>
+
+            {activeTab === 'dashboard' && (
+                <div style={{padding: '20px', background: '#1a1f2e', borderRadius: '12px'}}>
+                    <h2>Métricas del Sistema</h2>
+                    <p>Dashboard próximamente...</p>
                 </div>
-            </Card>
+            )}
+
+            {activeTab === 'users' && <UserManagement />}
         </div>
     );
 };
