@@ -1,0 +1,18 @@
+{
+  "version": "0.1.0",
+  "lastUpdate": "2026-02-06",
+  "environment": "development",
+  "changelog": [
+    {
+      "version": "0.1.0",
+      "date": "2026-02-06",
+      "changes": [
+        "Versión inicial con registro de partidos",
+        "Integración con Firebase y Gemini API",
+        "Sistema de autenticación de usuarios",
+        "Historial de partidos con filtros",
+        "Estadísticas y tablas de posiciones"
+      ]
+    }
+  ]
+}
