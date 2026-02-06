@@ -90,7 +90,7 @@ const PlayerInput: React.FC<PlayerInputProps> = ({ value = '', onChange, onTagUs
             backgroundColor: theme.colors.surface, border: `1px solid ${theme.colors.borderStrong}`,
             borderRadius: theme.borderRadius.medium, zIndex: 10,
             listStyle: 'none', margin: `${theme.spacing.extraSmall} 0 0 0`, padding: 0,
-            maxHeight: '200px', overflowY: 'auto',
+            maxHeight: '200px', overflowY: 'auto' as 'auto',
             boxShadow: theme.shadows.large,
         },
         suggestionItem: {

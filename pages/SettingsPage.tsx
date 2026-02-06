@@ -24,6 +24,8 @@ import CustomDateInput from '../components/common/CustomDateInput';
 import { createPendingMatch, updateUsername, deleteUserAccount } from '../services/firebaseService';
 import { DatabaseIcon } from '../components/icons/DatabaseIcon';
 import { LockIcon } from '../components/icons/LockIcon';
+import ImageCropperModal from '../components/modals/ImageCropperModal';
+import { EditLineIcon } from '../components/icons/EditLineIcon';
 
 // Admin Email Configuration
 const ADMIN_EMAILS = ['matias.severo@gmail.com']; 
@@ -55,7 +57,11 @@ const SettingsPage: React.FC = () => {
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isSmartImportOpen, setIsSmartImportOpen] = useState(false);
-  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  
+  // Cropper State
+  const [isCropperOpen, setIsCropperOpen] = useState(false);
+  const [rawImageSrc, setRawImageSrc] = useState<string | null>(null);
+
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [updateModalMode, setUpdateModalMode] = useState<'email' | 'password'>('email');
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 992);
@@ -93,54 +99,22 @@ const SettingsPage: React.FC = () => {
       setLocalProfile(prev => ({ ...prev, [field]: value }));
   };
 
-  const compressImage = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.src = URL.createObjectURL(file);
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 250; 
-        const MAX_HEIGHT = 250;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-        
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-        resolve(dataUrl);
-      };
-      img.onerror = (error) => reject(error);
-    });
-  };
-
-  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (file) {
-          setIsUploadingPhoto(true);
-          try {
-              const compressedPhoto = await compressImage(file);
-              handleProfileChange('photo', compressedPhoto);
-          } catch (error) {
-              console.error("Error compressing image:", error);
-              alert("Error al procesar la imagen.");
-          } finally {
-              setIsUploadingPhoto(false);
-          }
+          const reader = new FileReader();
+          reader.onload = (e) => {
+              setRawImageSrc(e.target?.result as string);
+              setIsCropperOpen(true);
+          };
+          reader.readAsDataURL(file);
       }
+      // Reset input so same file can be selected again if cancelled
+      if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
+  const handleCropComplete = (croppedImage: string) => {
+      handleProfileChange('photo', croppedImage);
   };
 
   const handleSaveProfile = async () => {
@@ -380,9 +354,26 @@ const SettingsPage: React.FC = () => {
     button: { padding: `${theme.spacing.medium} ${theme.spacing.large}`, border: 'none', borderRadius: theme.borderRadius.medium, fontSize: theme.typography.fontSize.medium, fontWeight: 'bold', cursor: 'pointer', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: theme.spacing.medium, transition: 'background-color 0.2s, color 0.2s, border 0.2s' },
     profileForm: { display: 'flex', flexDirection: 'column', gap: theme.spacing.medium, marginTop: '10px' },
     profileRow: { display: 'grid', gridTemplateColumns: '120px 1fr', gap: theme.spacing.large, alignItems: 'center' },
-    profilePhotoContainer: { width: '100px', height: '100px', borderRadius: '50%', overflow: 'hidden', cursor: 'pointer', backgroundColor: theme.colors.background, position: 'relative' },
+    // Updated photo container to be relative for overlay
+    profilePhotoContainer: { 
+        width: '100px', height: '100px', borderRadius: '50%', overflow: 'hidden', 
+        cursor: 'pointer', backgroundColor: theme.colors.background, 
+        position: 'relative', border: `1px solid ${theme.colors.border}`,
+        // Add transform to contain children paint
+        transform: 'translateZ(0)'
+    },
     profilePhoto: { width: '100%', height: '100%', objectFit: 'cover' },
-    loaderOverlay: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+    
+    // New Overlay Style
+    profileOverlay: {
+        position: 'absolute', inset: 0, 
+        background: 'rgba(0,0,0,0.4)', 
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        // Opacity handled by CSS class in render
+        transition: 'opacity 0.2s ease',
+        backdropFilter: 'blur(2px)',
+    },
+
     fieldGroup: { display: 'flex', flexDirection: 'column', gap: theme.spacing.small },
     label: { fontSize: theme.typography.fontSize.small, color: theme.colors.secondaryText, fontWeight: 500 },
     input: { width: '100%', padding: theme.spacing.medium, backgroundColor: theme.colors.background, border: `1px solid ${theme.colors.borderStrong}`, borderRadius: theme.borderRadius.medium, color: theme.colors.primaryText, fontSize: theme.typography.fontSize.medium, boxSizing: 'border-box' },
@@ -423,6 +414,17 @@ const SettingsPage: React.FC = () => {
       <style>{`
         @keyframes fadeInDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
         html { scrollbar-gutter: stable; }
+
+        /* Profile Hover Logic */
+        .profile-overlay { opacity: 0; }
+        
+        /* Desktop Hover */
+        @media (hover: hover) {
+            .profile-container:hover .profile-overlay { opacity: 1; }
+        }
+
+        /* Mobile Active/Touch */
+        .profile-container:active .profile-overlay { opacity: 1; }
       `}</style>
       <main style={styles.container}>
         <h2 style={styles.pageTitle}>Ajustes</h2>
@@ -536,14 +538,21 @@ const SettingsPage: React.FC = () => {
                     <div style={{...styles.sectionContent, animation: 'fadeInDown 0.3s ease-out'}}>
                         <div style={styles.profileForm}>
                             <div style={styles.profileRow}>
-                                <div style={styles.profilePhotoContainer} onClick={() => photoInputRef.current?.click()}>
+                                <div 
+                                    className="profile-container"
+                                    style={styles.profilePhotoContainer} 
+                                    onClick={() => photoInputRef.current?.click()}
+                                    title="Click para editar foto"
+                                >
                                     <img src={localProfile.photo || `https://ui-avatars.com/api/?name=${localProfile.name}&background=random`} alt="Perfil" style={styles.profilePhoto} />
-                                    {isUploadingPhoto && <div style={styles.loaderOverlay}><Loader /></div>}
+                                    <div className="profile-overlay" style={styles.profileOverlay}>
+                                        <EditLineIcon size={28} color="#FFFFFF" />
+                                    </div>
                                 </div>
-                                <input type="file" ref={photoInputRef} onChange={handlePhotoUpload} accept="image/*" style={{ display: 'none' }} />
+                                <input type="file" ref={photoInputRef} onChange={handlePhotoSelect} accept="image/*" style={{ display: 'none' }} />
                                 <div>
                                     <p style={{ margin: 0, fontSize: '0.9rem', color: theme.colors.primaryText, fontWeight: 600 }}>Foto de perfil</p>
-                                    <p style={{ margin: 0, fontSize: '0.8rem', color: theme.colors.secondaryText }}>Toca la imagen para cambiarla</p>
+                                    <p style={{ margin: 0, fontSize: '0.8rem', color: theme.colors.secondaryText }}>Toca la imagen para editarla y encuadrarla</p>
                                 </div>
                             </div>
                             
@@ -772,6 +781,12 @@ const SettingsPage: React.FC = () => {
             </span> :
             <span style={{color: theme.colors.loss}}>¡ADVERTENCIA! Esto borrará TODOS tus datos locales y reiniciará la aplicación. Si has iniciado sesión, los datos de la nube se mantendrán, pero este dispositivo se limpiará. Esta acción no se puede deshacer.</span>
         }
+      />
+      <ImageCropperModal
+          isOpen={isCropperOpen}
+          onClose={() => setIsCropperOpen(false)}
+          imageSrc={rawImageSrc}
+          onCropComplete={handleCropComplete}
       />
     </>
   );

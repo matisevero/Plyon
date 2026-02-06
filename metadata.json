@@ -1,6 +1,6 @@
 {
   "name": "Plyon",
-  "description": "Lanzamiento oficial. Plataforma definitiva de gestión de carrera deportiva.",
+  "description": "Punto de recuperación. Versión estable con todas las funcionalidades (Social, Stats, Carrera, IA).",
   "version": "4.2.1-prod",
   "requestFramePermissions": []
 }

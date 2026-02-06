@@ -22,11 +22,13 @@ import { TargetIcon } from '../components/icons/TargetIcon';
 import SectionHelp from '../components/common/SectionHelp';
 import { MILESTONES } from '../data/milestones';
 import { SparklesIcon } from '../components/icons/SparklesIcon';
+import { useHaptics } from '../hooks/useHaptics';
 
 const RecorderPage: React.FC = () => {
   const { theme } = useTheme();
   const { matches, addMatch, updateMatch, deleteMatch, playerProfile, updatePlayerProfile, availableTournaments, addQualifiersMatch, addWorldCupMatch, setCurrentPage } = useData();
   const { isTutorialSeen, markTutorialAsSeen } = useTutorial('recorder');
+  const haptics = useHaptics();
   
   const [error, setError] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 992);
@@ -144,6 +146,7 @@ const RecorderPage: React.FC = () => {
       const milestone = MILESTONES[newTotalMatches];
       
       if (milestone && !seen[milestone.id]) {
+          haptics.success(); // Vibrate on milestone!
           setActiveMilestoneId(milestone.id);
           setMilestoneSteps(milestone.steps);
           return true;
@@ -172,12 +175,15 @@ const RecorderPage: React.FC = () => {
             newMatch = await addMatch(data);
         }
         
+        haptics.success(); // Haptic feedback on success
+        
         const hitMilestone = checkMilestones(matches.length + 1);
         
         if (!hitMilestone) {
             setTimeout(() => { setLastAddedMatch(newMatch); }, 0);
         }
       } catch (e) {
+        haptics.error(); // Haptic feedback on error
         console.error("Failed to add match:", e);
         const errorMessage = e instanceof Error ? e.message : "No se pudo registrar el partido.";
         setError(errorMessage);
@@ -202,19 +208,25 @@ const RecorderPage: React.FC = () => {
   };
   
   const handleEditMatch = (matchId: string) => {
+      haptics.medium();
       const match = matches.find(m => m.id === matchId);
       if (match) setMatchToEdit(match);
   };
 
   const handleSaveEdit = (updatedMatch: Match) => {
+      haptics.success();
       updateMatch(updatedMatch);
       setMatchToEdit(null);
   };
 
-  const handleDeleteMatchClick = (matchId: string) => { setMatchToDelete(matchId); };
+  const handleDeleteMatchClick = (matchId: string) => { 
+      haptics.light();
+      setMatchToDelete(matchId); 
+  };
 
   const confirmDeleteMatch = async () => {
     if (matchToDelete) {
+      haptics.heavy(); // Haptic feedback on delete
       await deleteMatch(matchToDelete);
       setMatchToDelete(null);
     }

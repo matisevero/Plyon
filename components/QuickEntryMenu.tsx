@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { useData } from '../contexts/DataContext';
 import { SparklesIcon } from './icons/SparklesIcon';
@@ -8,6 +9,8 @@ import { CloseIcon } from './icons/CloseIcon';
 import { parseMatchesFromText, parseMatchFromImage } from '../services/geminiService';
 import type { Match } from '../types';
 import Waveform from './effects/Waveform';
+import { FootballIcon } from './icons/FootballIcon';
+import { ImageIcon } from './icons/ImageIcon';
 
 interface QuickEntryMenuProps {
     onDataParsed: (data: Partial<Match>) => void;
@@ -23,6 +26,25 @@ const QuickEntryMenu: React.FC<QuickEntryMenuProps> = ({ onDataParsed }) => {
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const recognitionRef = useRef<any>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Cleanup function to ensure mic is turned off
+    const cleanupMic = () => {
+        if (recognitionRef.current) {
+            try {
+                recognitionRef.current.stop();
+                recognitionRef.current.abort(); // Force stop
+            } catch (e) {
+                console.error("Error stopping mic:", e);
+            }
+            recognitionRef.current = null;
+        }
+        setIsListening(false);
+    };
+
+    // Effect to clean up on unmount
+    useEffect(() => {
+        return () => cleanupMic();
+    }, []);
 
     // -- Voice Logic --
     const startListening = () => {
@@ -44,20 +66,19 @@ const QuickEntryMenu: React.FC<QuickEntryMenuProps> = ({ onDataParsed }) => {
         setIsListening(true);
         setTranscript('');
 
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.lang = 'es-ES';
-        recognitionRef.current.continuous = true;
-        recognitionRef.current.interimResults = true;
+        // Reset if exists
+        cleanupMic();
 
-        recognitionRef.current.onresult = (event: any) => {
-            let interimTranscript = '';
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'es-ES';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+
+        recognition.onresult = (event: any) => {
             let finalTranscript = '';
-
             for (let i = event.resultIndex; i < event.results.length; ++i) {
                 if (event.results[i].isFinal) {
                     finalTranscript += event.results[i][0].transcript;
-                } else {
-                    interimTranscript += event.results[i][0].transcript;
                 }
             }
             if (finalTranscript) {
@@ -65,26 +86,32 @@ const QuickEntryMenu: React.FC<QuickEntryMenuProps> = ({ onDataParsed }) => {
             }
         };
 
-        recognitionRef.current.onerror = (event: any) => {
-            console.error(event.error);
+        recognition.onerror = (event: any) => {
+            console.error("Speech recognition error", event.error);
+            if (event.error === 'not-allowed') {
+                alert("Permiso de micrófono denegado.");
+            }
             setIsListening(false);
         };
 
-        recognitionRef.current.onend = () => {
-            setIsListening(false);
+        recognition.onend = () => {
+            // Auto-restart if we didn't explicitly stop (optional, but keep it simple for now)
+            if (isListening) {
+                 // setIsListening(false);
+            }
         };
 
-        recognitionRef.current.start();
+        recognitionRef.current = recognition;
+        recognition.start();
     };
 
     const stopListening = () => {
-        if (recognitionRef.current) {
-            recognitionRef.current.stop();
-            setIsListening(false);
-        }
+        cleanupMic();
     };
 
     const processTranscript = async () => {
+        cleanupMic(); // Ensure mic is off before processing
+        
         if (!transcript.trim()) return;
         setIsProcessing(true);
         try {
@@ -94,7 +121,7 @@ const QuickEntryMenu: React.FC<QuickEntryMenuProps> = ({ onDataParsed }) => {
                 await addAIInteraction('match_summary', { summary: `Voz: "${transcript}"` });
                 closeModal();
             } else {
-                alert("No pude entender los datos del partido. Intenta ser más específico.");
+                alert("No pude entender los datos. Intenta decir: 'Ganamos 5 a 4 con 2 goles mios'.");
             }
         } catch (e) {
             console.error(e);
@@ -142,20 +169,19 @@ const QuickEntryMenu: React.FC<QuickEntryMenuProps> = ({ onDataParsed }) => {
     };
 
     const closeModal = () => {
+        cleanupMic();
         setModalMode(null);
         setTranscript('');
         setImagePreview(null);
         setIsProcessing(false);
-        setIsListening(false);
-        if (recognitionRef.current) recognitionRef.current.stop();
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const styles: { [key: string]: React.CSSProperties } = {
+        // Trigger Buttons
         container: {
             display: 'flex',
             gap: theme.spacing.medium,
-            // marginBottom: removed to let parent control layout
         },
         actionButton: {
             flex: 1,
@@ -167,16 +193,11 @@ const QuickEntryMenu: React.FC<QuickEntryMenuProps> = ({ onDataParsed }) => {
             height: '42px',
             padding: '0 16px',
             borderRadius: theme.borderRadius.medium,
-            
-            // Gradient Border Logic:
-            // 1. Inner background matches surface color
-            // 2. Border is transparent but backed by the gradient box
             border: '2px solid transparent',
             background: `
                 linear-gradient(${theme.colors.surface}, ${theme.colors.surface}) padding-box, 
                 linear-gradient(90deg, ${theme.colors.accent1}, ${theme.colors.accent2}) border-box
             `,
-            
             color: theme.colors.primaryText,
             cursor: 'pointer',
             transition: 'filter 0.2s, transform 0.1s',
@@ -185,77 +206,223 @@ const QuickEntryMenu: React.FC<QuickEntryMenuProps> = ({ onDataParsed }) => {
             fontSize: '0.9rem',
         },
         photoButton: {
-            // Distinct gradient for photo
             background: `
                 linear-gradient(${theme.colors.surface}, ${theme.colors.surface}) padding-box, 
                 linear-gradient(90deg, ${theme.colors.accent2}, #5C6BC0) border-box
             `,
         },
-        icon: { 
-            fontSize: '1.1rem',
-            display: 'flex',
-            alignItems: 'center'
-        },
-        
-        // Modal Styles
+
+        // Modal
         backdrop: {
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 2000,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)', zIndex: 3000,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: theme.spacing.medium, backdropFilter: 'blur(5px)'
+            padding: theme.spacing.medium, backdropFilter: 'blur(8px)',
+            animation: 'fadeIn 0.3s ease'
         },
-        modal: {
+        modalCard: {
             backgroundColor: theme.colors.surface,
             borderRadius: theme.borderRadius.large,
-            padding: theme.spacing.extraLarge,
-            width: '100%', maxWidth: '400px',
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            position: 'relative', border: `1px solid ${theme.colors.border}`
+            boxShadow: theme.shadows.large,
+            border: `1px solid ${theme.colors.border}`,
+            width: '100%', maxWidth: '500px',
+            overflow: 'hidden',
+            display: 'flex', flexDirection: 'column',
+            animation: 'scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+            position: 'relative'
         },
-        closeBtn: {
-            position: 'absolute', top: 10, right: 10,
-            background: 'none', border: 'none', cursor: 'pointer'
+        header: {
+            padding: theme.spacing.large,
+            borderBottom: `1px solid ${theme.colors.border}`,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            background: theme.colors.background
+        },
+        title: {
+            margin: 0, fontSize: '1.25rem', fontWeight: 800,
+            color: theme.colors.primaryText,
+            display: 'flex', alignItems: 'center', gap: '8px'
+        },
+        titleGradient: {
+            background: `linear-gradient(90deg, ${theme.colors.accent1}, ${theme.colors.accent2})`,
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+        },
+        content: {
+            padding: theme.spacing.large,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: theme.spacing.large,
+            minHeight: '250px', justifyContent: 'center'
         },
         transcriptBox: {
-            width: '100%', minHeight: '100px',
-            backgroundColor: theme.colors.background,
+            width: '100%',
             padding: theme.spacing.medium,
             borderRadius: theme.borderRadius.medium,
-            margin: '1rem 0',
-            fontSize: '1rem',
+            backgroundColor: theme.colors.background,
+            border: `1px solid ${theme.colors.borderStrong}`,
             color: theme.colors.primaryText,
-            border: `1px solid ${theme.colors.border}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
+            fontSize: '1.1rem',
+            lineHeight: 1.5,
+            minHeight: '100px',
+            boxSizing: 'border-box',
+            textAlign: 'center'
         },
-        listeningIndicator: {
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-            marginBottom: '1rem'
+        placeholderText: {
+            color: theme.colors.secondaryText,
+            fontStyle: 'italic'
         },
-        listeningText: {
-            color: theme.colors.accent1, fontWeight: 'bold', fontSize: '0.9rem'
-        },
-        primaryBtn: {
-            backgroundColor: theme.colors.accent1,
-            color: theme.colors.textOnAccent,
-            padding: '12px 24px',
-            borderRadius: '24px',
-            border: 'none',
-            fontWeight: 'bold',
-            fontSize: '1rem',
-            cursor: 'pointer',
+        controls: {
+            display: 'flex',
+            gap: theme.spacing.medium,
             width: '100%',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+            marginTop: 'auto'
         },
-        previewImg: {
-            width: '100%', maxHeight: '300px', objectFit: 'contain',
-            borderRadius: theme.borderRadius.medium, marginBottom: '1rem'
+        button: {
+            flex: 1,
+            padding: '12px',
+            borderRadius: theme.borderRadius.medium,
+            border: 'none',
+            fontSize: '1rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+            transition: 'transform 0.1s'
+        },
+        recordBtn: {
+            backgroundColor: theme.colors.loss,
+            color: '#fff',
+            boxShadow: `0 0 15px ${theme.colors.loss}60`,
+            animation: isListening ? 'pulse-red 1.5s infinite' : 'none'
+        },
+        confirmBtn: {
+            backgroundColor: theme.colors.accent1,
+            color: theme.colors.textOnAccent
+        },
+        cancelBtn: {
+            backgroundColor: 'transparent',
+            border: `1px solid ${theme.colors.borderStrong}`,
+            color: theme.colors.secondaryText
+        },
+        imagePreview: {
+            width: '100%',
+            maxHeight: '300px',
+            objectFit: 'contain',
+            borderRadius: theme.borderRadius.medium,
+            border: `1px solid ${theme.colors.border}`,
+            backgroundColor: '#000'
         }
     };
+
+    const modalContent = (
+        <div style={styles.backdrop} onClick={closeModal}>
+            <style>{`
+                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+                @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(255, 82, 82, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 82, 82, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 82, 82, 0); } }
+            `}</style>
+            
+            <div style={styles.modalCard} onClick={e => e.stopPropagation()}>
+                <div style={styles.header}>
+                    <h3 style={styles.title}>
+                        <SparklesIcon size={24} color={theme.colors.accent1} /> 
+                        <span style={styles.titleGradient}>
+                            {modalMode === 'voice' ? 'Asistente de Voz' : 'Escáner de Imagen'}
+                        </span>
+                    </h3>
+                    <button 
+                        onClick={closeModal} 
+                        style={{background:'none', border:'none', cursor:'pointer', padding: '4px'}}
+                    >
+                        <CloseIcon size={24} color={theme.colors.primaryText} />
+                    </button>
+                </div>
+
+                <div style={styles.content}>
+                    {isProcessing ? (
+                        <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:'1rem'}}>
+                            <Loader />
+                            <p style={{color: theme.colors.secondaryText, margin: 0}}>Procesando información...</p>
+                        </div>
+                    ) : modalMode === 'voice' ? (
+                        <>
+                            <div style={{height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%'}}>
+                                {isListening ? (
+                                    <Waveform />
+                                ) : (
+                                    <div style={{opacity: 0.3}}><Waveform /></div> // Static or grayed out
+                                )}
+                            </div>
+                            
+                            <div style={styles.transcriptBox}>
+                                {transcript ? (
+                                    transcript
+                                ) : (
+                                    <span style={styles.placeholderText}>
+                                        {isListening ? "Escuchando... di el resultado, goles y asistencias." : "Presiona el micrófono para empezar."}
+                                    </span>
+                                )}
+                            </div>
+
+                            <div style={styles.controls}>
+                                {isListening ? (
+                                    <button 
+                                        type="button" 
+                                        style={{...styles.button, ...styles.recordBtn}}
+                                        onClick={stopListening}
+                                    >
+                                        ⏹ Detener
+                                    </button>
+                                ) : (
+                                    <button 
+                                        type="button" 
+                                        style={{...styles.button, backgroundColor: theme.colors.accent2, color: '#fff'}}
+                                        onClick={startListening}
+                                    >
+                                        🎙️ Grabar
+                                    </button>
+                                )}
+
+                                {transcript && !isListening && (
+                                    <button 
+                                        type="button" 
+                                        style={{...styles.button, ...styles.confirmBtn}}
+                                        onClick={processTranscript}
+                                    >
+                                        <SparklesIcon size={18} /> Procesar
+                                    </button>
+                                )}
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            {imagePreview && (
+                                <img src={imagePreview} alt="Preview" style={styles.imagePreview} />
+                            )}
+                            <div style={styles.controls}>
+                                <button 
+                                    type="button" 
+                                    style={{...styles.button, ...styles.cancelBtn}}
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    Cambiar Foto
+                                </button>
+                                <button 
+                                    type="button" 
+                                    style={{...styles.button, ...styles.confirmBtn}}
+                                    onClick={processImage}
+                                >
+                                    <SparklesIcon size={18} /> Extraer Datos
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 
     return (
         <>
             <div style={styles.container}>
                 <button 
+                    type="button"
                     style={styles.actionButton}
                     onClick={startListening}
                     onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(0.95)'}
@@ -266,6 +433,7 @@ const QuickEntryMenu: React.FC<QuickEntryMenuProps> = ({ onDataParsed }) => {
                 </button>
                 
                 <button 
+                    type="button"
                     style={{...styles.actionButton, ...styles.photoButton}}
                     onClick={() => fileInputRef.current?.click()}
                     onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(0.95)'}
@@ -283,63 +451,7 @@ const QuickEntryMenu: React.FC<QuickEntryMenuProps> = ({ onDataParsed }) => {
                 />
             </div>
 
-            {/* Modal for Voice/Image */}
-            {modalMode && (
-                <div style={styles.backdrop} onClick={closeModal}>
-                    <style>{`@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }`}</style>
-                    <div style={styles.modal} onClick={e => e.stopPropagation()}>
-                        <button style={styles.closeBtn} onClick={closeModal}><CloseIcon color={theme.colors.primaryText}/></button>
-                        
-                        <h3 style={{margin: '0 0 1rem 0', color: theme.colors.primaryText}}>
-                            {modalMode === 'voice' ? 'Cuéntame el partido' : 'Analizar Imagen'}
-                        </h3>
-
-                        {modalMode === 'voice' && (
-                            <>
-                                {isListening ? (
-                                    <div style={styles.listeningIndicator}>
-                                        <Waveform />
-                                        <span style={styles.listeningText}>Escuchando...</span>
-                                    </div>
-                                ) : (
-                                    <div style={{color: theme.colors.secondaryText, marginBottom: '1rem'}}>Grabación detenida</div>
-                                )}
-                                <div style={styles.transcriptBox}>
-                                    {transcript ? (
-                                        <span style={{textAlign: 'left', width: '100%'}}>{transcript}</span>
-                                    ) : (
-                                        <span style={{opacity: 0.5, fontStyle: 'italic', textAlign: 'center'}}>
-                                            Di algo como: "Ganamos 5 a 4, metí 3 goles. Jugué con Mati y Juan contra el equipo de Lucas."
-                                        </span>
-                                    )}
-                                </div>
-                                <div style={{display: 'flex', gap: '10px', width: '100%'}}>
-                                    {isListening ? (
-                                        <button onClick={stopListening} style={{...styles.primaryBtn, backgroundColor: theme.colors.loss}}>
-                                            Detener
-                                        </button>
-                                    ) : (
-                                        <button onClick={processTranscript} disabled={!transcript || isProcessing} style={styles.primaryBtn}>
-                                            {isProcessing ? <Loader/> : <SparklesIcon />}
-                                            {isProcessing ? 'Procesando...' : 'Analizar'}
-                                        </button>
-                                    )}
-                                </div>
-                            </>
-                        )}
-
-                        {modalMode === 'image' && (
-                            <>
-                                {imagePreview && <img src={imagePreview} style={styles.previewImg} alt="preview" />}
-                                <button onClick={processImage} disabled={isProcessing} style={styles.primaryBtn}>
-                                    {isProcessing ? <Loader/> : <SparklesIcon />}
-                                    {isProcessing ? 'Analizando...' : 'Extraer Datos'}
-                                </button>
-                            </>
-                        )}
-                    </div>
-                </div>
-            )}
+            {modalMode && createPortal(modalContent, document.body)}
         </>
     );
 };

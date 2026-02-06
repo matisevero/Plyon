@@ -241,6 +241,7 @@ export interface SeasonRating {
     description: string;
     score: number;
     efficiency: number;
+    similarTo?: string;
 }
 
 export interface PublicProfile {

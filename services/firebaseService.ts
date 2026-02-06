@@ -532,10 +532,16 @@ export const getSocialFeed = (friendIds: string[], userId: string, callback: (ac
     // Firestore "in" supports 10. For now limit to 10 friends or implement advanced feed.
     const limitedIds = ids.slice(0, 10);
     
-    const q = query(collection(db, 'activities'), where('userId', 'in', limitedIds), orderBy('timestamp', 'desc'), limit(20));
+    // Removed orderBy to avoid index requirement error. 
+    // Ideally, create a composite index in Firestore console and restore orderBy.
+    const q = query(collection(db, 'activities'), where('userId', 'in', limitedIds), limit(50));
     return onSnapshot(q, (snapshot) => {
         const activities = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as SocialActivity));
+        // Sort client side
+        activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         callback(activities);
+    }, (error) => {
+        console.error("Error fetching social feed:", error);
     });
 };
 

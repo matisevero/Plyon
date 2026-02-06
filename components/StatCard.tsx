@@ -72,7 +72,7 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, valueStyle = {}, icon
               color: color, 
               fontSize: '0.8rem', 
               marginLeft: '6px', 
-              verticalAlign: 'middle',
+              verticalAlign: 'middle', 
               display: 'inline-flex',
               alignItems: 'center',
               fontWeight: 800,
@@ -141,7 +141,8 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, valueStyle = {}, icon
             {isNumeric ? displayValue : value}
         </span>
         {getTrendIcon()}
-        {count && count > 1 && <span style={styles.countBadge}>x{count}</span>}
+        {/* Only show if count is defined AND strictly greater than 1 */}
+        {(count || 0) > 1 && <span style={styles.countBadge}>x{count}</span>}
       </div>
       <div style={styles.labelContainer}>
         {icon}

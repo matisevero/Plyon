@@ -1,13 +1,14 @@
+
 import React from 'react';
 
-export const SparklesIcon: React.FC<{ size?: number }> = ({ size = 20 }) => (
+export const SparklesIcon: React.FC<{ size?: number; color?: string }> = ({ size = 20, color = 'currentColor' }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width={size}
     height={size}
     viewBox="0 0 24 24"
-    fill="currentColor"
-    stroke="currentColor"
+    fill={color}
+    stroke={color}
     strokeWidth="1"
     strokeLinecap="round"
     strokeLinejoin="round"

@@ -24,6 +24,7 @@ import LandingPage from './pages/LandingPage';
 import AdminPage from './pages/AdminPage';
 import SeasonRecapPage from './pages/SeasonRecapPage'; // NEW PAGE
 import { Loader } from './components/Loader';
+import DashboardSkeleton from './components/skeletons/DashboardSkeleton'; // NEW SKELETON
 import SyncBanner from './components/SyncBanner';
 import DataConflictModal from './components/modals/DataConflictModal';
 import SharedViewLoader from './components/SharedViewLoader';
@@ -144,11 +145,14 @@ const MainAppContent: React.FC = () => {
     }
   };
 
+  // Replace circular loader with Dashboard Skeleton for a premium feel
   if (dataLoading || authLoading) {
     return (
-      <div style={{ ...styles.appContainer, ...styles.fullScreenLoader }}>
-        <Loader />
-        <p>Cargando Plyon...</p>
+      <div style={styles.appContainer}>
+        <Header />
+        <div style={{ paddingTop: '65px' }}>
+             <DashboardSkeleton />
+        </div>
       </div>
     );
   }

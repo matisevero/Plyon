@@ -18,6 +18,17 @@ export const getColorForString = (str: string): string => {
   return colors[Math.abs(hash) % colors.length];
 };
 
+// --- PLAYER LISTS FOR TIERS ---
+const TIER_PLAYERS: Record<string, string[]> = {
+    'GOAT': ['Lionel Messi', 'Pelé', 'Diego Maradona'],
+    'Leyenda': ['Cristiano Ronaldo', 'Johan Cruyff', 'Alfredo Di Stéfano', 'Franz Beckenbauer', 'Zinedine Zidane', 'Ronaldo Nazário', 'Michel Platini'],
+    'Clase Mundial': ['Ronaldinho', 'Xavi', 'Iniesta', 'Roberto Baggio', 'George Best', 'Bobby Charlton', 'Marco van Basten', 'Gerd Müller', 'Andrea Pirlo', 'Thierry Henry'],
+    'Galáctico': ['Kylian Mbappé', 'Kevin De Bruyne', 'Mohamed Salah', 'Karim Benzema', 'Toni Kroos', 'Luka Modrić', 'Ruud Van Nistelrooy'],
+    'Estrella': ['Jude Bellingham', 'Viní Jr.', 'Roberto Carlos', 'Antoine Griezmann', 'Bernardo Silva', 'Lautaro Martínez', 'Julián Álvarez', 'Bruno Fernandes', 'Enzo Fernández', 'Lamine Yamal'],
+    'Profesional': ['Federico Valverde', 'Ilkay Gündogan', 'Casemiro', 'Romelu Lukaku', 'Dani Carvajal'],
+    'Promesa': ['Exequiel Palacios', 'Alejandro Garnacho', 'Xavi Simons', 'Ousmane Dembélé', 'Cole Palmer', 'Gavi', 'Eden Hazard', 'Arda Güler', 'Phil Foden']
+};
+
 // --- CONSTANTS ---
 export const WORLD_CUP_LOGO: Record<string, string> = {
     light: 'https://www.dropbox.com/scl/fi/9iste5u6ze5ed3xfchrin/WorldCup2026-Light.png?rlkey=lzil2u05fdp07oou9m2vi6evh&raw=1',
@@ -146,27 +157,43 @@ export const calculateHistoricalRecords = (matches: Match[]): HistoricalRecords 
     let currentGoalDrought = 0;
     let currentAssistDrought = 0;
 
+    const updateRecord = (recordKey: keyof HistoricalRecords, currentVal: number) => {
+        if (currentVal > records[recordKey].value) {
+            records[recordKey].value = currentVal;
+            records[recordKey].count = 1;
+        } else if (currentVal === records[recordKey].value && currentVal > 0) {
+            records[recordKey].count++;
+        }
+    };
+
     sortedMatches.forEach(match => {
         // Streaks
         if (match.result === 'VICTORIA') {
             currentWinStreak++;
+            updateRecord('longestWinStreak', currentWinStreak);
+            
             currentWinlessStreak = 0;
             currentLossStreak = 0;
             currentDrawStreak = 0;
         } else {
             currentWinStreak = 0;
             currentWinlessStreak++;
+            updateRecord('longestWinlessStreak', currentWinlessStreak);
+
             if (match.result === 'DERROTA') {
                 currentLossStreak++;
+                updateRecord('longestLossStreak', currentLossStreak);
                 currentDrawStreak = 0;
             } else {
                 currentLossStreak = 0;
                 currentDrawStreak++;
+                updateRecord('longestDrawStreak', currentDrawStreak);
             }
         }
 
         if (match.result !== 'DERROTA') {
             currentUndefeatedStreak++;
+            updateRecord('longestUndefeatedStreak', currentUndefeatedStreak);
         } else {
             currentUndefeatedStreak = 0;
         }
@@ -174,45 +201,27 @@ export const calculateHistoricalRecords = (matches: Match[]): HistoricalRecords 
         // Goals/Assists Streaks
         if (match.myGoals > 0) {
             currentGoalStreak++;
+            updateRecord('longestGoalStreak', currentGoalStreak);
             currentGoalDrought = 0;
         } else {
             currentGoalStreak = 0;
             currentGoalDrought++;
+            updateRecord('longestGoalDrought', currentGoalDrought);
         }
 
         if (match.myAssists > 0) {
             currentAssistStreak++;
+            updateRecord('longestAssistStreak', currentAssistStreak);
             currentAssistDrought = 0;
         } else {
             currentAssistStreak = 0;
             currentAssistDrought++;
+            updateRecord('longestAssistDrought', currentAssistDrought);
         }
-
-        // Update Max Records
-        records.longestWinStreak.value = Math.max(records.longestWinStreak.value, currentWinStreak);
-        records.longestUndefeatedStreak.value = Math.max(records.longestUndefeatedStreak.value, currentUndefeatedStreak);
-        records.longestDrawStreak.value = Math.max(records.longestDrawStreak.value, currentDrawStreak);
-        records.longestLossStreak.value = Math.max(records.longestLossStreak.value, currentLossStreak);
-        records.longestWinlessStreak.value = Math.max(records.longestWinlessStreak.value, currentWinlessStreak);
-        records.longestGoalStreak.value = Math.max(records.longestGoalStreak.value, currentGoalStreak);
-        records.longestAssistStreak.value = Math.max(records.longestAssistStreak.value, currentAssistStreak);
-        records.longestGoalDrought.value = Math.max(records.longestGoalDrought.value, currentGoalDrought);
-        records.longestAssistDrought.value = Math.max(records.longestAssistDrought.value, currentAssistDrought);
         
         // Single Match Records
-        if (match.myGoals > records.bestGoalPerformance.value) {
-            records.bestGoalPerformance.value = match.myGoals;
-            records.bestGoalPerformance.count = 1;
-        } else if (match.myGoals === records.bestGoalPerformance.value && match.myGoals > 0) {
-            records.bestGoalPerformance.count++;
-        }
-
-        if (match.myAssists > records.bestAssistPerformance.value) {
-            records.bestAssistPerformance.value = match.myAssists;
-            records.bestAssistPerformance.count = 1;
-        } else if (match.myAssists === records.bestAssistPerformance.value && match.myAssists > 0) {
-            records.bestAssistPerformance.count++;
-        }
+        updateRecord('bestGoalPerformance', match.myGoals);
+        updateRecord('bestAssistPerformance', match.myAssists);
     });
 
     return records;
@@ -287,8 +296,6 @@ export const getProgressForGoal = (goal: Goal, matches: Match[]): number => {
 };
 
 export const evaluateCustomAchievement = (achievement: CustomAchievement, matches: Match[]): boolean => {
-    // This requires complex streak logic for every metric type.
-    // Simplifying: we calculate historical records for the passed matches and check the value.
     const records = calculateHistoricalRecords(matches);
     const { metric, value, operator } = achievement.condition;
     
@@ -302,7 +309,6 @@ export const evaluateCustomAchievement = (achievement: CustomAchievement, matche
         case 'assistStreak': achievedValue = records.longestAssistStreak.value; break;
         case 'goalDrought': achievedValue = records.longestGoalDrought.value; break;
         case 'assistDrought': achievedValue = records.longestAssistDrought.value; break;
-        // Complex conditions not fully implemented in basic records, skipping for MVP
         default: achievedValue = 0;
     }
 
@@ -312,98 +318,229 @@ export const evaluateCustomAchievement = (achievement: CustomAchievement, matche
     return false;
 };
 
-export const calculatePlayerMorale = (matches: Match[]): PlayerMorale | null => {
-    if (matches.length < 3) return null;
-    
-    // Sort matches newest first
-    const sortedMatches = [...matches].sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime());
-    const last5 = sortedMatches.slice(0, 5);
-    
-    // Calculate Score (0-100)
+// Internal score calculation for morale
+const calculateMoraleScore = (matchesSlice: Match[]) => {
     let score = 50; // Base
-    
-    // Recent Form Weight
-    last5.forEach((m, i) => {
-        const weight = (5 - i) * 2; // More recent = more weight
+    matchesSlice.forEach((m, i) => {
+        const weight = (5 - i) * 2; // Index 0 is newest in this context
         if (m.result === 'VICTORIA') score += weight * 2;
         else if (m.result === 'EMPATE') score += weight;
         else score -= weight * 1.5;
         
         score += (m.myGoals * 2) + m.myAssists;
     });
+    return Math.max(0, Math.min(100, score));
+};
 
-    score = Math.max(0, Math.min(100, score));
+export const calculatePlayerMorale = (matches: Match[]): PlayerMorale | null => {
+    if (matches.length < 3) return null;
+    
+    // Sort matches newest first
+    const sortedMatches = [...matches].sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime());
+    
+    // Current Window (0)
+    const currentWindow = sortedMatches.slice(0, 5);
+    const currentScore = calculateMoraleScore(currentWindow);
 
     // Determine Level
     let level = MoraleLevel.REGULAR;
     let description = "Estás en un momento normal.";
 
-    if (score >= 90) { level = MoraleLevel.MODO_D10S; description = "Injugable. Todo lo que tocas es oro."; }
-    else if (score >= 80) { level = MoraleLevel.ESTELAR; description = "Estás brillando en el campo."; }
-    else if (score >= 70) { level = MoraleLevel.INSPIRADO; description = "Con mucha confianza y buen juego."; }
-    else if (score >= 60) { level = MoraleLevel.CONFIADO; description = "Te sientes bien y los resultados acompañan."; }
-    else if (score >= 50) { level = MoraleLevel.SOLIDO; description = "Rendimiento constante y fiable."; }
-    else if (score >= 40) { level = MoraleLevel.REGULAR; description = "Ni bien ni mal, hay que apretar."; }
-    else if (score >= 30) { level = MoraleLevel.DUDOSO; description = "Algunas dudas en tu juego reciente."; }
-    else if (score >= 20) { level = MoraleLevel.BLOQUEADO; description = "Necesitas un buen partido para desbloquearte."; }
+    if (currentScore >= 90) { level = MoraleLevel.MODO_D10S; description = "Injugable. Todo lo que tocas es oro."; }
+    else if (currentScore >= 80) { level = MoraleLevel.ESTELAR; description = "Estás brillando en el campo."; }
+    else if (currentScore >= 70) { level = MoraleLevel.INSPIRADO; description = "Con mucha confianza y buen juego."; }
+    else if (currentScore >= 60) { level = MoraleLevel.CONFIADO; description = "Te sientes bien y los resultados acompañan."; }
+    else if (currentScore >= 50) { level = MoraleLevel.SOLIDO; description = "Rendimiento constante y fiable."; }
+    else if (currentScore >= 40) { level = MoraleLevel.REGULAR; description = "Ni bien ni mal, hay que apretar."; }
+    else if (currentScore >= 30) { level = MoraleLevel.DUDOSO; description = "Algunas dudas en tu juego reciente."; }
+    else if (currentScore >= 20) { level = MoraleLevel.BLOQUEADO; description = "Necesitas un buen partido para desbloquearte."; }
     else { level = MoraleLevel.EN_CAIDA_LIBRE; description = "Mala racha. Es momento de resetear."; }
 
     // Trend calculation
-    // Compare last 3 vs previous 3
-    const currentAvg = last5.slice(0, 3).reduce((acc, m) => acc + (m.result === 'VICTORIA' ? 3 : m.result === 'EMPATE' ? 1 : 0), 0) / 3;
-    const prevAvg = last5.slice(3, 5).length > 0 ? last5.slice(3, 5).reduce((acc, m) => acc + (m.result === 'VICTORIA' ? 3 : m.result === 'EMPATE' ? 1 : 0), 0) / last5.slice(3, 5).length : currentAvg;
-    
+    // Calculate previous windows to determine streak
     let trend: 'up' | 'down' | 'same' | 'new' = 'same';
-    if (currentAvg > prevAvg) trend = 'up';
-    else if (currentAvg < prevAvg) trend = 'down';
+    let trendStreak = 1;
+    
+    // Window 1 (Matches 1..5)
+    if (sortedMatches.length > 1) {
+        const prevWindow = sortedMatches.slice(1, 6);
+        const prevScore = calculateMoraleScore(prevWindow);
+        
+        if (currentScore > prevScore) trend = 'up';
+        else if (currentScore < prevScore) trend = 'down';
+        
+        // Calculate Streak
+        if (trend !== 'same') {
+            for (let i = 1; i < sortedMatches.length - 1; i++) {
+                const wCurrent = sortedMatches.slice(i, i + 5);
+                const wPrev = sortedMatches.slice(i + 1, i + 6);
+                
+                // If we run out of enough matches for a full window, stop strictly or loose? 
+                // Let's assume we need at least 1 match in wPrev to compare.
+                if (wPrev.length === 0) break;
+
+                const sCurrent = calculateMoraleScore(wCurrent);
+                const sPrev = calculateMoraleScore(wPrev);
+                
+                let localTrend = 'same';
+                if (sCurrent > sPrev) localTrend = 'up';
+                else if (sCurrent < sPrev) localTrend = 'down';
+                
+                if (localTrend === trend) {
+                    trendStreak++;
+                } else {
+                    break;
+                }
+            }
+        }
+    }
 
     return {
         level,
-        score,
+        score: currentScore,
         description,
-        recentMatchesSummary: { matchesConsidered: last5.length, record: '', goals: 0, assists: 0 }, // Simplified
+        recentMatchesSummary: { matchesConsidered: currentWindow.length, record: '', goals: 0, assists: 0 },
         trend,
-        trendStreak: 1
+        trendStreak
     };
 };
 
 export const calculateSeasonRating = (matches: Match[]): SeasonRating => {
     const totalMatches = matches.length;
-    if (totalMatches === 0) return { tierName: 'N/A', description: 'Sin partidos', score: 0, efficiency: 0 };
+    if (totalMatches === 0) return { tierName: 'Sin Clasificar', description: 'Juega partidos para obtener rango.', score: 0, efficiency: 0 };
 
-    const wins = matches.filter(m => m.result === 'VICTORIA').length;
-    const draws = matches.filter(m => m.result === 'EMPATE').length;
-    const goals = matches.reduce((s, m) => s + m.myGoals, 0);
-    const assists = matches.reduce((s, m) => s + m.myAssists, 0);
-    const points = wins * 3 + draws;
-    const efficiency = (points / (totalMatches * 3)) * 100;
-    
-    // Score Formula
-    const score = (points * 10) + (goals * 5) + (assists * 3) + (efficiency * 2);
-    
-    let tierName = 'Novato';
-    let description = 'Temporada de aprendizaje.';
+    let totalScore = 0;
+    let totalPossiblePoints = 0;
+    let totalPointsWon = 0;
 
-    if (score > 1500) { tierName = 'GOAT 🐐'; description = 'Una temporada legendaria.'; }
-    else if (score > 1000) { tierName = 'The Best 🏆'; description = 'Dominaste la liga.'; }
-    else if (score > 750) { tierName = 'Clase Mundial 🌍'; description = 'Rendimiento de élite.'; }
-    else if (score > 500) { tierName = 'Estrella ⭐'; description = 'Gran temporada.'; }
-    else if (score > 250) { tierName = 'Profesional 🎩'; description = 'Sólido y cumplidor.'; }
+    matches.forEach(m => {
+        // Base Points
+        const pointsWon = m.result === 'VICTORIA' ? 3 : m.result === 'EMPATE' ? 1 : 0;
+        totalPointsWon += pointsWon;
+        totalPossiblePoints += 3;
+
+        // Multipliers
+        let multiplier = 5; // Default (Amistosos / Regular)
+        
+        if (m.matchMode === 'qualifiers') {
+            multiplier = 10;
+        } else if (m.matchMode === 'world-cup') {
+            // Heuristic to detect Elite vs Friendly WC
+            if (m.tournament?.includes('Élite') || (m.earnedPoints && m.earnedPoints > 20)) {
+                multiplier = 30;
+            } else {
+                multiplier = 10; // World Cup Libre
+            }
+        }
+        
+        totalScore += (pointsWon * multiplier);
+
+        // Goals & Assists
+        totalScore += (m.myGoals * 3);
+        totalScore += (m.myAssists * 2);
+    });
+
+    // Efficiency Calculation
+    const efficiency = totalPossiblePoints > 0 ? (totalPointsWon / totalPossiblePoints) * 100 : 0;
+    let efficiencyScore = 0;
     
-    return { tierName, description, score: Math.round(score), efficiency: Math.round(efficiency) };
+    if (efficiency >= 55) {
+        // Bonus: Scales with efficiency above 55%
+        efficiencyScore = (efficiency - 55) * 2; 
+    } else if (efficiency < 45) {
+        // Penalty: Scales with inefficiency below 45%
+        efficiencyScore = (efficiency - 45) * 2; // Becomes negative
+    }
+    // 45 to 54 is neutral (0)
+
+    totalScore += efficiencyScore;
+    totalScore = Math.round(totalScore);
+
+    // 10 Levels
+    let tierName = '';
+    let description = '';
+    let tierBase = ''; // To find player list
+
+    if (totalScore >= 2000) { tierName = 'GOAT 🐐'; description = 'Historia pura del fútbol.'; tierBase = 'GOAT'; }
+    else if (totalScore >= 1500) { tierName = 'Leyenda 🏆'; description = 'Dominio absoluto del juego.'; tierBase = 'Leyenda'; }
+    else if (totalScore >= 1000) { tierName = 'Clase Mundial 🌍'; description = 'La élite del deporte.'; tierBase = 'Clase Mundial'; }
+    else if (totalScore >= 750) { tierName = 'Galáctico 🌌'; description = 'Una estrella entre nosotros.'; tierBase = 'Galáctico'; }
+    else if (totalScore >= 500) { tierName = 'Estrella ⭐'; description = 'El mejor de la cancha.'; tierBase = 'Estrella'; }
+    else if (totalScore >= 350) { tierName = 'Profesional 🎩'; description = 'Rendimiento sólido y serio.'; tierBase = 'Profesional'; }
+    else if (totalScore >= 200) { tierName = 'Promesa 💎'; description = 'Mucho talento, falta rodaje.'; tierBase = 'Promesa'; }
+    else if (totalScore >= 100) { tierName = 'Amateur 👟'; description = 'Jugando por diversión.'; tierBase = 'Amateur'; }
+    else if (totalScore >= 50) { tierName = 'Aprendiz 📚'; description = 'Entendiendo el juego.'; tierBase = 'Aprendiz'; }
+    else { tierName = 'Dominguero 🍺'; description = 'Lo importante es participar... y el asado.'; tierBase = 'Dominguero'; }
+    
+    // Pick similar player
+    let similarTo = undefined;
+    const playersList = TIER_PLAYERS[tierBase];
+    if (playersList && playersList.length > 0) {
+        // Use a simple pseudo-random selection based on score so it doesn't flicker wildly on re-renders, 
+        // but changes if score changes slightly.
+        const index = Math.abs(totalScore) % playersList.length;
+        similarTo = playersList[index];
+    }
+
+    return { tierName, description, score: totalScore, efficiency: Math.round(efficiency), similarTo };
 };
 
-export const generateFeaturedInsights = (matches: Match[], profile: PlayerProfileData): FeaturedInsight[] => {
+export const generateFeaturedInsights = (matches: Match[], profile: PlayerProfileData, periodLabel: string = 'este año'): FeaturedInsight[] => {
     const insights: FeaturedInsight[] = [];
-    // Example logic
+    if (matches.length === 0) return insights;
+
     const wins = matches.filter(m => m.result === 'VICTORIA').length;
-    if (wins > 10) {
-        insights.push({ icon: '🔥', title: 'Ganador', description: `Has ganado ${wins} partidos este año.` });
-    }
+    const losses = matches.filter(m => m.result === 'DERROTA').length;
+    const totalMatches = matches.length;
     const goals = matches.reduce((s, m) => s + m.myGoals, 0);
-    if (goals > 20) {
-        insights.push({ icon: '⚽', title: 'Goleador', description: `Llevas ${goals} goles anotados.` });
+    const assists = matches.reduce((s, m) => s + m.myAssists, 0);
+    const winRate = (wins / totalMatches) * 100;
+    
+    // Goleador
+    if (goals >= 15 || (totalMatches >= 5 && (goals / totalMatches) >= 1.0)) {
+        insights.push({
+            icon: '⚽',
+            title: 'Artillero',
+            description: `Anotaste ${goals} goles ${periodLabel}.`
+        });
     }
+
+    // Asistidor
+    if (assists >= 10 || (totalMatches >= 5 && (assists / totalMatches) >= 0.5)) {
+        insights.push({
+            icon: '👟',
+            title: 'Visionario',
+            description: `Repartiste ${assists} asistencias ${periodLabel}.`
+        });
+    }
+
+    // Ganador
+    if (winRate > 60 && totalMatches >= 5) {
+        insights.push({
+            icon: '🔥',
+            title: 'Mentalidad Ganadora',
+            description: `Ganaste el ${winRate.toFixed(0)}% de tus partidos ${periodLabel}.`
+        });
+    }
+    
+    // Invicto (Hard to achieve)
+    if (losses === 0 && totalMatches >= 5) {
+        insights.push({
+            icon: '🛡️',
+            title: 'Invencible',
+            description: `Terminaste invicto ${periodLabel} (${totalMatches} PJ).`
+        });
+    }
+
+    // Iron Man (Volumen)
+    if (totalMatches >= 30) {
+         insights.push({
+            icon: '🦾',
+            title: 'Incansable',
+            description: `Disputaste ${totalMatches} encuentros ${periodLabel}.`
+        });
+    }
+
     return insights;
 };
 

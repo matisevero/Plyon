@@ -116,6 +116,16 @@ const MoraleDisplay: React.FC<{ morale: PlayerMorale | null, isLoading: boolean,
             lineHeight: 1.6,
             margin: 0,
             fontStyle: 'italic',
+        },
+        trendContainer: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem',
+            backgroundColor: theme.colors.surface,
+            padding: '2px 8px',
+            borderRadius: theme.borderRadius.medium,
+            border: `1px solid ${theme.colors.border}`,
+            marginLeft: '4px'
         }
     };
 
@@ -125,17 +135,16 @@ const MoraleDisplay: React.FC<{ morale: PlayerMorale | null, isLoading: boolean,
                 <span style={styles.icon}>{moraleConfig.icon}</span>
                 <h4 style={styles.level}>{morale.level}</h4>
                 {trendIcon && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <div style={styles.trendContainer}>
                         {trendIcon}
-                        {morale.trendStreak > 1 && (
-                            <span style={{
-                                fontSize: '0.9rem',
-                                fontWeight: 'bold',
-                                color: morale.trend === 'up' ? theme.colors.win : theme.colors.loss
-                            }}>
-                                ({morale.trendStreak})
-                            </span>
-                        )}
+                        {/* Always show streak count (x1, x2, etc) if trend exists */}
+                        <span style={{
+                            fontSize: '0.9rem',
+                            fontWeight: 'bold',
+                            color: morale.trend === 'up' ? theme.colors.win : theme.colors.loss
+                        }}>
+                            x{morale.trendStreak}
+                        </span>
                     </div>
                 )}
             </div>
@@ -212,6 +221,14 @@ const SeasonRatingDisplay: React.FC<{ rating: SeasonRating, year: string }> = ({
             fontWeight: 500,
             opacity: 0.7,
             marginTop: '4px'
+        },
+        playerCompare: {
+            marginTop: '15px',
+            paddingTop: '10px',
+            borderTop: isTopTier ? '1px solid rgba(0,0,0,0.1)' : `1px solid ${theme.colors.border}`,
+            fontSize: '0.9rem',
+            fontWeight: 600,
+            width: '100%',
         }
     };
 
@@ -225,6 +242,14 @@ const SeasonRatingDisplay: React.FC<{ rating: SeasonRating, year: string }> = ({
                 {rating.score}
             </div>
             <div style={styles.label}>Puntos de Temporada</div>
+            
+            {rating.similarTo && (
+                <div style={styles.playerCompare}>
+                    <span style={{opacity: 0.7, fontSize: '0.8rem', display: 'block', marginBottom: '2px'}}>SIMILAR A</span>
+                    {rating.similarTo}
+                </div>
+            )}
+
             {rating.efficiency !== undefined && (
                 <div style={styles.efficiency}>
                     Factor de efectividad: {rating.efficiency}%
@@ -311,8 +336,9 @@ const StreaksWidget: React.FC<StreaksWidgetProps> = ({ matches }) => {
   }, [matchesForStreaks, filteredMatches, showCurrentStreaks, selectedYear]);
 
   const featuredInsights = useMemo(() => {
-      return generateFeaturedInsights(filteredMatches, playerProfile);
-  }, [filteredMatches, playerProfile]);
+      const label = selectedYear === 'all' ? 'históricamente' : `en ${selectedYear}`;
+      return generateFeaturedInsights(filteredMatches, playerProfile, label);
+  }, [filteredMatches, playerProfile, selectedYear]);
 
   // Use matchesForStreaks here to allow streaks to cross year boundaries
   const { activeStreaks, last5MatchesStats, currentStreaks } = useMemo(() => {

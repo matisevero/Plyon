@@ -15,6 +15,7 @@ import { FootballIcon } from './icons/FootballIcon';
 import { getFriendsList } from '../services/firebaseService';
 import FriendProfileModal from './modals/FriendProfileModal';
 import ShareMatchOptionsModal from './modals/ShareMatchOptionsModal';
+import { useHaptics } from '../hooks/useHaptics';
 
 interface MatchCardProps {
   match: Match;
@@ -25,6 +26,8 @@ interface MatchCardProps {
   isReadOnly?: boolean;
   sortBy?: MatchSortByType;
   forceExpanded?: boolean;
+  isExpanded?: boolean; // New prop for controlled state
+  onToggle?: () => void; // New prop for controlled toggling
   hideShareButton?: boolean;
   hideCareerBanner?: boolean;
   showFooterLogo?: boolean;
@@ -38,13 +41,30 @@ const resultAbbreviations: Record<'VICTORIA' | 'DERROTA' | 'EMPATE', string> = {
 
 const MatchCard: React.FC<MatchCardProps> = ({ 
     match, allMatches, allPlayers, onDelete, onEdit, 
-    isReadOnly = false, sortBy, forceExpanded = false, hideShareButton = false,
+    isReadOnly = false, sortBy, forceExpanded = false, 
+    isExpanded: isExpandedProp, onToggle,
+    hideShareButton = false,
     hideCareerBanner = false, showFooterLogo = false
 }) => {
   const { theme } = useTheme();
+  const haptics = useHaptics();
   const { playerProfile } = useData();
   const { result, myGoals, myAssists, date, notes, tournament } = match;
-  const [isExpanded, setIsExpanded] = useState(forceExpanded);
+  
+  const [internalExpanded, setInternalExpanded] = useState(forceExpanded);
+  
+  // Use controlled state if provided, otherwise internal
+  const isExpanded = isExpandedProp !== undefined ? isExpandedProp : internalExpanded;
+
+  const handleToggle = () => {
+      if (forceExpanded) return;
+      if (onToggle) {
+          onToggle();
+      } else {
+          haptics.light();
+          setInternalExpanded(!internalExpanded);
+      }
+  };
   
   // Estado para controlar si la imagen falló al cargar
   const [imgError, setImgError] = useState(false);
@@ -57,6 +77,8 @@ const MatchCard: React.FC<MatchCardProps> = ({
   const handlePlayerClick = async (playerName: string) => {
       // Si es solo lectura (ej: en la imagen generada), no hacemos nada
       if (isReadOnly) return;
+      
+      haptics.light();
 
       const mappedUid = playerProfile.playerMappings?.[playerName];
       if (mappedUid) {
@@ -445,12 +467,12 @@ const MatchCard: React.FC<MatchCardProps> = ({
       // Don't render if explicitly hidden
       if (hideCareerBanner) return null;
 
-      // Only render full banner if it IS a career match detected by date AND there is no conflicting tournament name
+      // Only render full banner if it IS a career match detected by date
       if (!isCareerMatch || !careerInfo) return null;
 
-      // If user manually set a tournament name (e.g. "Fútbol Martes") even during World Cup, don't show the Career Banner inside details.
-      // This keeps the "Fútbol Martes" identity clean.
-      if (hasExplicitTournament) return null;
+      // NOTE: Even if tournament name exists, we allow Career Banner in expanded view for context if desired.
+      // But typically if user overrode it, maybe hide? 
+      // Current logic: Show career banner inside details ALWAYS if date matches context, regardless of tournament tag overriding.
 
       let logoUrl = '';
       let color = theme.colors.primaryText;
@@ -495,9 +517,8 @@ const MatchCard: React.FC<MatchCardProps> = ({
   let tagLabel = null;
   let tagStyle = {};
 
+  // ONLY show tag if user explicitly entered a tournament name
   if (hasExplicitTournament) {
-      // 1. Explicit Tournament (e.g., "Fútbol Martes")
-      // ALWAYS use Outline Style, regardless of date/career mode
       tagLabel = tournament;
       const color = getColorForString(tagLabel);
       tagStyle = {
@@ -506,20 +527,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
           border: `1px solid ${color}`,
           color: color,
       };
-  } else if (isCareerMatch && careerInfo) {
-      // 2. Implicit Career Match (No explicit name, but date matches career)
-      // Use Career Style (Solid background)
-      tagLabel = careerInfo.label;
-      if (!hideCareerBanner) {
-          const color = isWorldCup ? theme.colors.accent1 : theme.colors.accent2;
-          tagStyle = {
-              ...styles.tournamentTag,
-              backgroundColor: color,
-              borderColor: color,
-              color: theme.colors.textOnAccent
-          };
-      }
-  }
+  } 
 
   return (
     <>
@@ -553,12 +561,12 @@ const MatchCard: React.FC<MatchCardProps> = ({
         </div>
         <div 
             style={styles.toggleRow} 
-            onClick={() => !forceExpanded && setIsExpanded(!isExpanded)} 
+            onClick={handleToggle} 
             role="button" tabIndex={0} aria-expanded={isExpanded}
         >
             <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.medium, minWidth: 0, flex: 1 }}>
                 
-                {/* Show Career Icon if it matches the date criteria, acting as a small badge */}
+                {/* Show Career Icon if it matches the date criteria, acting as a small badge (visual cue only) */}
                 {isCareerMatch && careerInfo && !hideCareerBanner && (
                     <div 
                         style={{
@@ -669,7 +677,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                 {!isReadOnly && !hideShareButton && (
                 <div style={styles.shareContainer}>
                     <button
-                        onClick={() => setIsShareModalOpen(true)}
+                        onClick={() => { haptics.medium(); setIsShareModalOpen(true); }}
                         style={styles.shareButton}
                     >
                         <ShareIcon />

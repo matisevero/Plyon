@@ -88,8 +88,11 @@ export const DuelsPage: React.FC = () => {
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 992);
   const [selectedYear, setSelectedYear] = useState<string | 'all'>('all');
   
-  // Carousel State
+  // Carousel State & Touch Logic
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+  const minSwipeDistance = 50;
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -252,6 +255,37 @@ export const DuelsPage: React.FC = () => {
       { id: 'worstPartners', title: "⚠️ Socios complejos", description: "Compañeros con los que la química aún no fluye.", players: insights.worstPartners, color: theme.colors.draw, type: 'teammates' },
       { id: 'nemesisRivals', title: "👻 La Bestia Negra", description: "Rivales que históricamente te complican el partido.", players: insights.nemesisRivals, color: theme.colors.loss, type: 'opponents' },
   ], [insights, theme.colors]);
+  
+  // --- TOUCH HANDLERS ---
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+  
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+  
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    
+    if (isLeftSwipe) {
+       if (currentSlide < insightSlides.length - 1) setCurrentSlide(currentSlide + 1);
+    }
+    if (isRightSwipe) {
+       if (currentSlide > 0) setCurrentSlide(currentSlide - 1);
+    }
+    
+    setTouchStart(null);
+    setTouchEnd(null);
+  };
+  
+  // Also support mouse for testing on desktop
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
   const handleSort = <T extends string>( key: T, currentSort: SortItem<T>[], setSort: React.Dispatch<React.SetStateAction<SortItem<T>[]>> ) => { setSort(prev => { const existingIndex = prev.findIndex(item => item.key === key); if (isMultiSortMode) { if (existingIndex >= 0) { const newSort = [...prev]; newSort[existingIndex] = { ...newSort[existingIndex], order: newSort[existingIndex].order === 'desc' ? 'asc' : 'desc' }; return newSort; } else { const newSort = [...prev, { key, order: 'desc' as const }]; if (newSort.length > 3) newSort.shift(); return newSort; } } else { if (prev.length > 0 && prev[0].key === key) return [{ key, order: prev[0].order === 'desc' ? 'asc' : 'desc' }]; return [{ key, order: 'desc' }]; } }); };
   const getComparator = <T extends Record<string, any>>(sortConfig: SortItem<keyof T>[]) => { return (a: T, b: T) => { for (const sort of sortConfig) { const key = sort.key; const order = sort.order; let valA: any = a[key]; let valB: any = b[key]; if (key === 'record') { const pointsA = a.record.wins * 3 + a.record.draws; const pointsB = b.record.wins * 3 + b.record.draws; valA = pointsA; valB = pointsB; } if (typeof valA === 'string' && typeof valB === 'string') { const comparison = valA.localeCompare(valB); if (comparison !== 0) return order === 'asc' ? comparison : -comparison; } else if (typeof valA === 'number' && typeof valB === 'number') { if (valA < valB) return order === 'asc' ? -1 : 1; if (valA > valB) return order === 'asc' ? 1 : -1; } } return 0; }; };
@@ -297,6 +331,8 @@ export const DuelsPage: React.FC = () => {
     sortBadge: { fontSize: '0.65rem', fontWeight: 800, backgroundColor: theme.colors.accent2, color: theme.colors.textOnAccent, borderRadius: '50%', width: '14px', height: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '2px' }, 
     insightsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: theme.spacing.medium, width: '100%' }, 
     tableNameContainer: { display: 'flex', alignItems: 'center' }, 
+    
+    // Updated Carousel Styles for Touch Swipe
     carouselContainer: { 
         display: 'flex', 
         flexDirection: 'column' as 'column', 
@@ -304,14 +340,27 @@ export const DuelsPage: React.FC = () => {
         justifyContent: 'flex-start',
         gap: theme.spacing.small, 
         backgroundColor: theme.colors.surface, 
-        padding: theme.spacing.large, 
+        padding: 0, // Removed padding for cleaner swipe edge
         borderRadius: theme.borderRadius.large, 
         border: `1px solid ${theme.colors.border}`, 
         width: '100%', 
         boxShadow: theme.shadows.medium, 
-        boxSizing: 'border-box' 
+        boxSizing: 'border-box',
+        overflow: 'hidden', // Essential for masking slides
+        position: 'relative' as 'relative'
     }, 
-    slideContent: { width: '100%', padding: 0 }, 
+    carouselTrack: {
+        display: 'flex',
+        width: '100%',
+        transition: 'transform 0.3s ease-out', // Smooth slide
+    },
+    carouselSlide: {
+        minWidth: '100%',
+        boxSizing: 'border-box',
+        padding: theme.spacing.large,
+        display: 'flex',
+        flexDirection: 'column' as 'column',
+    },
     insightTitle: { margin: 0, fontSize: theme.typography.fontSize.medium, fontWeight: 700, paddingBottom: theme.spacing.small, borderBottom: `1px solid ${theme.colors.border}`, }, 
     insightDescription: { 
         margin: `${theme.spacing.medium} 0 ${theme.spacing.small} 0`, 
@@ -319,7 +368,7 @@ export const DuelsPage: React.FC = () => {
         color: theme.colors.secondaryText, 
         fontStyle: 'italic', 
     }, 
-    paginationContainer: { display: 'flex', gap: '8px', marginTop: '10px' }, 
+    paginationContainer: { display: 'flex', gap: '8px', padding: '10px 0 15px 0' }, 
     dot: { width: '8px', height: '8px', borderRadius: '50%', backgroundColor: theme.colors.borderStrong, border: 'none', cursor: 'pointer', padding: 0 }, 
     activeDot: { width: '8px', height: '8px', borderRadius: '50%', backgroundColor: theme.colors.accent1, border: 'none', cursor: 'pointer', padding: 0 } 
   };
@@ -330,20 +379,30 @@ export const DuelsPage: React.FC = () => {
 
   const mainContent = (
       <div style={{display: 'flex', flexDirection: 'column', gap: theme.spacing.large, width: '100%'}}>
-          <div style={styles.carouselContainer}>
-              <div style={styles.slideContent}>
-                  <h4 style={{...styles.insightTitle, color: insightSlides[currentSlide].color}}>{insightSlides[currentSlide].title}</h4>
-                  <p style={styles.insightDescription}>{insightSlides[currentSlide].description}</p>
-                  <InsightList 
-                    title="" 
-                    description="" 
-                    players={insightSlides[currentSlide].players} 
-                    color={insightSlides[currentSlide].color} 
-                    onPlayerClick={handlePlayerClick} 
-                    limit={5} 
-                    onViewMore={() => setActiveTab(insightSlides[currentSlide].type as any)} 
-                  />
+          <div 
+             style={styles.carouselContainer}
+             onTouchStart={onTouchStart}
+             onTouchMove={onTouchMove}
+             onTouchEnd={onTouchEnd}
+          >
+              <div style={{...styles.carouselTrack, transform: `translateX(-${currentSlide * 100}%)`}}>
+                  {insightSlides.map((slide, index) => (
+                      <div key={index} style={styles.carouselSlide}>
+                          <h4 style={{...styles.insightTitle, color: slide.color}}>{slide.title}</h4>
+                          <p style={styles.insightDescription}>{slide.description}</p>
+                          <InsightList 
+                            title="" 
+                            description="" 
+                            players={slide.players} 
+                            color={slide.color} 
+                            onPlayerClick={handlePlayerClick} 
+                            limit={5} 
+                            onViewMore={() => setActiveTab(slide.type as any)} 
+                          />
+                      </div>
+                  ))}
               </div>
+              
               <div style={styles.paginationContainer}>
                   {insightSlides.map((_, index) => (
                       <button 
