@@ -123,6 +123,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const theme = useMemo(() => (effectiveThemeName === 'dark' ? darkTheme : lightTheme), [effectiveThemeName]);
 
+  // Sync data-theme attribute on <html> for CSS custom properties
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', effectiveThemeName);
+  }, [effectiveThemeName]);
+
   const toggleTheme = () => {
     const newTheme = effectiveThemeName === 'dark' ? 'light' : 'dark';
     setThemePreference(newTheme);

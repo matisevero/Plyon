@@ -1,0 +1,367 @@
+/* MatchForm.module.css */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  position: relative;
+  transition: background-color 0.4s ease;
+  border-radius: var(--radius-md);
+}
+
+.gridContainer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: flex-end;
+  gap: var(--spacing-md);
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: 0 var(--spacing-sm);
+  height: 42px;
+}
+
+.stepperError {
+  border-color: var(--color-loss);
+}
+
+.stepperButton {
+  background: none;
+  border: none;
+  color: var(--color-text-primary);
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0 var(--spacing-sm);
+  transition: color var(--transition-fast);
+}
+
+.stepperButton:hover {
+  color: var(--color-accent-1);
+}
+
+.stepperButton:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.stepperValue {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  min-width: 24px;
+  text-align: center;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.label {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  padding-left: 0.25rem;
+}
+
+.radioGroup {
+  display: flex;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-strong);
+  overflow: hidden;
+  height: 42px;
+}
+
+.radioGroupError {
+  border-color: var(--color-loss);
+}
+
+.radioLabel {
+  flex: 1;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  transition: all var(--transition-fast);
+  font-size: 0.9rem;
+}
+
+.radioLabel:hover:not(.radioLabelActive) {
+  background-color: var(--nav-hover-bg);
+}
+
+.submitButton {
+  flex: 1;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  font-weight: bold;
+  cursor: pointer;
+  background-color: var(--color-accent-1);
+  color: var(--color-text-on-accent);
+  border: none;
+  transition: transform 0.1s ease, opacity var(--transition-fast);
+  margin-top: var(--spacing-sm);
+}
+
+.submitButton:hover {
+  opacity: 0.9;
+}
+
+.submitButton:active {
+  transform: scale(0.98);
+}
+
+.toggleInfoButton {
+  height: 42px;
+  background: none;
+  border: 1px dashed var(--color-border-strong);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.toggleInfoButton:hover {
+  border-color: var(--color-accent-2);
+  color: var(--color-accent-2);
+}
+
+.addPlayerButton {
+  background: none;
+  border: 1px dashed var(--color-border);
+  color: var(--color-accent-2);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 0.8rem;
+  width: 100%;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.addPlayerButton:hover {
+  border-color: var(--color-accent-2);
+  background-color: color-mix(in srgb, var(--color-accent-2) 5%, transparent);
+}
+
+.textArea {
+  width: 100%;
+  padding: var(--spacing-md);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+  box-sizing: border-box;
+  font-family: var(--font-family);
+  resize: vertical;
+  transition: border-color var(--transition-fast);
+}
+
+.textArea:focus {
+  border-color: var(--color-accent-2);
+  outline: none;
+}
+
+.animatedSection {
+  animation: slideDownFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: top;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.removePlayerBtn {
+  background: none;
+  border: none;
+  color: var(--color-loss);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 1.2rem;
+  height: 30px;
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--transition-fast);
+}
+
+.removePlayerBtn:hover {
+  opacity: 0.7;
+}
+
+.validationMsg {
+  color: var(--color-loss);
+  font-size: 0.75rem;
+  margin-top: 2px;
+  margin-left: 4px;
+}
+
+/* PlayerInput styles */
+.playerInputContainer {
+  position: relative;
+  width: 100%;
+}
+
+.playerInputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.playerInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem 0.6rem;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+  height: 32px;
+  transition: border-color var(--transition-fast);
+}
+
+.playerInput:focus {
+  border-color: var(--color-accent-2);
+  outline: none;
+}
+
+.playerInputTagging {
+  border-color: var(--color-accent-2);
+}
+
+.playerInputWithIcon {
+  padding-right: 26px;
+}
+
+.verifiedIcon {
+  position: absolute;
+  right: 6px;
+  color: var(--color-accent-2);
+  pointer-events: none;
+}
+
+.suggestionsList {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  z-index: 10;
+  list-style: none;
+  margin: var(--spacing-xs) 0 0 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.suggestionItem {
+  padding: var(--spacing-sm);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color var(--transition-fast);
+}
+
+.suggestionItem:hover {
+  background-color: var(--nav-hover-bg);
+}
+
+.globalItem {
+  background-color: color-mix(in srgb, var(--color-accent-2) 6%, transparent);
+}
+
+.avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.username {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+
+/* StatControlButton styles */
+.statControlContainer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0 2px;
+}
+
+.statControlMinus {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--color-loss);
+  color: #fff;
+  border: 1px solid var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: bold;
+  z-index: 10;
+  padding: 0;
+  line-height: 1;
+  box-shadow: var(--shadow-sm);
+}
+
+.statControlMain {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: 0 6px;
+  min-width: 40px;
+  height: 30px;
+  cursor: pointer;
+  transition: all 0.2s, transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  color: var(--color-text-primary);
+  position: relative;
+  background-color: transparent;
+}
+
+.statControlIcon {
+  display: flex;
+  font-size: 0.9rem;
+}
+
+.statControlValue {
+  font-weight: 800;
+  font-size: 0.85rem;
+}

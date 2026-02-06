@@ -9,6 +9,7 @@ import CustomDateInput from './common/CustomDateInput';
 import { useAuth } from '../contexts/AuthContext';
 import { LinkIcon } from './icons/LinkIcon';
 import QuickEntryMenu from './QuickEntryMenu';
+import s from './MatchForm.module.css';
 
 interface MatchFormProps {
   onAddMatch: (match: Omit<Match, 'id'>) => void;
@@ -42,7 +43,6 @@ interface PlayerInputProps {
 }
 
 const PlayerInput: React.FC<PlayerInputProps> = ({ value = '', onChange, onTagUser, suggestions = [], placeholder, isVerified }) => {
-    const { theme } = useTheme();
     const { user } = useAuth();
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [globalResults, setGlobalResults] = useState<PublicProfile[]>([]);
@@ -63,7 +63,7 @@ const PlayerInput: React.FC<PlayerInputProps> = ({ value = '', onChange, onTagUs
     }, [isTagging, safeValue, user]);
 
     const filteredLocalSuggestions = suggestions.filter(
-        s => s && String(s).toLowerCase().includes(safeValue.toLowerCase()) && String(s).toLowerCase() !== safeValue.toLowerCase()
+        ss => ss && String(ss).toLowerCase().includes(safeValue.toLowerCase()) && String(ss).toLowerCase() !== safeValue.toLowerCase()
     );
 
     const handleSelect = (newValue: string, uid?: string) => {
@@ -72,42 +72,15 @@ const PlayerInput: React.FC<PlayerInputProps> = ({ value = '', onChange, onTagUs
         setShowSuggestions(false);
     };
 
-    const styles = useMemo(() => ({
-        container: { position: 'relative' as 'relative', width: '100%' },
-        inputWrapper: { position: 'relative' as 'relative', display: 'flex', alignItems: 'center' },
-        input: {
-            width: '100%', boxSizing: 'border-box' as 'border-box', padding: '0.4rem 0.6rem',
-            paddingRight: isVerified ? '26px' : '0.6rem',
-            backgroundColor: theme.colors.background,
-            border: `1px solid ${isTagging ? theme.colors.accent2 : theme.colors.borderStrong}`, 
-            borderRadius: theme.borderRadius.medium, color: theme.colors.primaryText,
-            fontSize: theme.typography.fontSize.medium,
-            height: '32px'
-        },
-        verifiedIcon: { position: 'absolute' as 'absolute', right: '6px', color: theme.colors.accent2, pointerEvents: 'none' as 'none' },
-        suggestionsList: {
-            position: 'absolute' as 'absolute', top: '100%', left: 0, right: 0,
-            backgroundColor: theme.colors.surface, border: `1px solid ${theme.colors.borderStrong}`,
-            borderRadius: theme.borderRadius.medium, zIndex: 10,
-            listStyle: 'none', margin: `${theme.spacing.extraSmall} 0 0 0`, padding: 0,
-            maxHeight: '200px', overflowY: 'auto' as 'auto',
-            boxShadow: theme.shadows.large,
-        },
-        suggestionItem: {
-            padding: theme.spacing.small, cursor: 'pointer',
-            fontSize: theme.typography.fontSize.small,
-            color: theme.colors.primaryText,
-            borderBottom: `1px solid ${theme.colors.border}`,
-            display: 'flex', alignItems: 'center', gap: '8px'
-        },
-        globalItem: { backgroundColor: `${theme.colors.accent2}10` },
-        avatar: { width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover' as 'cover' },
-        username: { color: theme.colors.secondaryText, fontSize: '0.75rem', marginLeft: 'auto' }
-    }), [theme, isTagging, isVerified]);
+    const inputClasses = [
+        s.playerInput,
+        isTagging ? s.playerInputTagging : '',
+        isVerified ? s.playerInputWithIcon : '',
+    ].filter(Boolean).join(' ');
 
     return (
-        <div style={styles.container}>
-            <div style={styles.inputWrapper}>
+        <div className={s.playerInputContainer}>
+            <div className={s.playerInputWrapper}>
                 <input
                     type="text"
                     value={safeValue}
@@ -115,27 +88,27 @@ const PlayerInput: React.FC<PlayerInputProps> = ({ value = '', onChange, onTagUs
                     onFocus={() => setShowSuggestions(true)}
                     onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                     placeholder={placeholder}
-                    style={styles.input}
+                    className={inputClasses}
                     autoComplete="off"
                 />
-                {isVerified && <div style={styles.verifiedIcon} title="Usuario verificado"><LinkIcon size={14} /></div>}
+                {isVerified && <div className={s.verifiedIcon} title="Usuario verificado"><LinkIcon size={14} /></div>}
             </div>
             {showSuggestions && (
-                <ul style={styles.suggestionsList}>
+                <ul className={s.suggestionsList}>
                     {isTagging ? (
                         <>
                             {globalResults.map(profile => (
-                                <li key={profile.uid} style={{...styles.suggestionItem, ...styles.globalItem}} onMouseDown={() => handleSelect(profile.name, profile.uid)}>
-                                    <img src={profile.photo || `https://ui-avatars.com/api/?name=${profile.name}&background=random`} alt="" style={styles.avatar}/>
+                                <li key={profile.uid} className={`${s.suggestionItem} ${s.globalItem}`} onMouseDown={() => handleSelect(profile.name, profile.uid)}>
+                                    <img src={profile.photo || `https://ui-avatars.com/api/?name=${profile.name}&background=random`} alt="" className={s.avatar}/>
                                     <span>{profile.name}</span>
-                                    <span style={styles.username}>@{profile.username}</span>
+                                    <span className={s.username}>@{profile.username}</span>
                                 </li>
                             ))}
                         </>
                     ) : (
-                        filteredLocalSuggestions.slice(0, 5).map((s, i) => (
-                            <li key={i} style={styles.suggestionItem} onMouseDown={() => handleSelect(s)}>
-                                {s}
+                        filteredLocalSuggestions.slice(0, 5).map((suggestion, i) => (
+                            <li key={i} className={s.suggestionItem} onMouseDown={() => handleSelect(suggestion)}>
+                                {suggestion}
                             </li>
                         ))
                     )}
@@ -147,7 +120,6 @@ const PlayerInput: React.FC<PlayerInputProps> = ({ value = '', onChange, onTagUs
 
 // Special button for Goals and Assists with "pop" animation
 const StatControlButton: React.FC<{ value: number; onChange: (v: number) => void; icon: React.ReactNode; color: string }> = ({ value, onChange, icon, color }) => {
-    const { theme } = useTheme();
     const isActive = value > 0;
     const [isPopping, setIsPopping] = useState(false);
 
@@ -159,60 +131,25 @@ const StatControlButton: React.FC<{ value: number; onChange: (v: number) => void
         setTimeout(() => setIsPopping(false), 200);
     };
 
-    const styles = useMemo(() => ({
-        container: { position: 'relative' as 'relative', display: 'flex', alignItems: 'center', margin: '0 2px' },
-        minusButton: {
-            position: 'absolute' as 'absolute',
-            top: '-6px',
-            left: '-6px',
-            width: '16px',
-            height: '16px',
-            borderRadius: '50%',
-            backgroundColor: theme.colors.loss,
-            color: '#FFF',
-            border: '1px solid ' + theme.colors.surface,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: '10px',
-            fontWeight: 'bold',
-            zIndex: 10,
-            padding: 0,
-            lineHeight: 1,
-            boxShadow: theme.shadows.small
-        },
-        mainButton: {
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '4px',
-            backgroundColor: isActive ? `${color}20` : 'transparent',
-            border: `1px solid ${isActive ? color : theme.colors.borderStrong}`,
-            borderRadius: theme.borderRadius.medium,
-            padding: '0 6px',
-            minWidth: '40px',
-            height: '30px',
-            cursor: 'pointer',
-            transition: 'all 0.2s, transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-            color: theme.colors.primaryText,
-            position: 'relative' as 'relative',
-            transform: isPopping ? 'scale(1.15)' : 'scale(1)', // Pop animation
-        },
-        icon: { color: isActive ? color : theme.colors.primaryText, display: 'flex', fontSize: '0.9rem' },
-        value: { fontWeight: 800, fontSize: '0.85rem', color: color }
-    }), [theme, isActive, color, isPopping]);
-
     return (
-        <div style={styles.container}>
+        <div className={s.statControlContainer}>
             {value > 0 && (
-                <button type="button" onClick={(e) => handleClick(e, value - 1)} style={styles.minusButton} title="Restar">
+                <button type="button" onClick={(e) => handleClick(e, value - 1)} className={s.statControlMinus} title="Restar">
                     -
                 </button>
             )}
-            <button type="button" onClick={(e) => handleClick(e, value + 1)} style={styles.mainButton}>
-                <div style={styles.icon}>{icon}</div>
-                {isActive && <span style={styles.value}>{value}</span>}
+            <button 
+                type="button" 
+                onClick={(e) => handleClick(e, value + 1)} 
+                className={s.statControlMain}
+                style={{
+                    backgroundColor: isActive ? `${color}20` : 'transparent',
+                    borderColor: isActive ? color : undefined,
+                    transform: isPopping ? 'scale(1.15)' : 'scale(1)',
+                }}
+            >
+                <div className={s.statControlIcon} style={{ color: isActive ? color : undefined }}>{icon}</div>
+                {isActive && <span className={s.statControlValue} style={{ color }}>{value}</span>}
             </button>
         </div>
     );
@@ -235,19 +172,14 @@ const MatchForm: React.FC<MatchFormProps> = ({ onAddMatch, allPlayers, available
   const [opponentPlayers, setOpponentPlayers] = useState<PlayerPerformance[]>([]);
   
   const [showAdditionalInfo, setShowAdditionalInfo] = useState(false);
-  
-  // Validation State
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [flashColor, setFlashColor] = useState<string | null>(null);
 
-  // Validate Goal Difference Effect
   useEffect(() => {
     const newErrors = { ...errors };
-    
     if (result === 'VICTORIA' && goalDifference <= 0) {
         newErrors.goalDifference = 'En victoria, la diferencia debe ser > 0.';
     } else if (result === 'DERROTA' && goalDifference <= 0) {
-        // Note: goalDifference state is usually positive magnitude, logic below handles sign
         newErrors.goalDifference = 'En derrota, la diferencia debe ser > 0.';
     } else {
         delete newErrors.goalDifference;
@@ -255,7 +187,6 @@ const MatchForm: React.FC<MatchFormProps> = ({ onAddMatch, allPlayers, available
     setErrors(newErrors);
   }, [goalDifference, result]);
 
-  // Effect to populate form when initialData changes
   useEffect(() => {
       if (initialData) {
           if (initialData.result) setResult(initialData.result);
@@ -302,7 +233,6 @@ const MatchForm: React.FC<MatchFormProps> = ({ onAddMatch, allPlayers, available
 
   const handleResultChange = (newResult: 'VICTORIA' | 'DERROTA' | 'EMPATE') => {
       setResult(newResult);
-      // Remove result error if present
       if (errors.result) {
           const newErrors = {...errors};
           delete newErrors.result;
@@ -321,7 +251,6 @@ const MatchForm: React.FC<MatchFormProps> = ({ onAddMatch, allPlayers, available
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Final Validation Check
     const submitErrors: Record<string, string> = {};
     if (!result) submitErrors.result = 'Selecciona un resultado.';
     if (result !== 'EMPATE' && goalDifference <= 0) submitErrors.goalDifference = 'La diferencia debe ser mayor a 0.';
@@ -332,7 +261,6 @@ const MatchForm: React.FC<MatchFormProps> = ({ onAddMatch, allPlayers, available
     }
 
     let finalGoalDiff = Math.abs(goalDifference);
-
     if (result === 'EMPATE') {
         finalGoalDiff = 0;
     } else if (result === 'DERROTA') {
@@ -343,7 +271,6 @@ const MatchForm: React.FC<MatchFormProps> = ({ onAddMatch, allPlayers, available
         .map(p => ({ ...p, name: p.name.trim() }))
         .filter(p => p.name && p.name.toLowerCase() !== (playerProfile.name || '').toLowerCase());
     const finalOpponents = opponentPlayers.map(p => ({ ...p, name: p.name.trim() })).filter(p => p.name);
-
     const finalTournament = tournament.trim();
 
     if (finalTournament && !availableTournaments.includes(finalTournament)) {
@@ -364,7 +291,6 @@ const MatchForm: React.FC<MatchFormProps> = ({ onAddMatch, allPlayers, available
 
     onAddMatch(matchData);
     
-    // Reset Form
     setResult(null);
     setMyGoals(0);
     setMyAssists(0);
@@ -392,11 +318,11 @@ const MatchForm: React.FC<MatchFormProps> = ({ onAddMatch, allPlayers, available
   const removePlayer = (setList: any, index: number) => setList((prev: any) => prev.filter((_: any, i: number) => i !== index));
 
   const renderPlayerInputs = (players: PlayerPerformance[], setPlayers: any, label: string) => (
-      <div style={styles.fieldGroup}>
-          <label style={styles.label}>{label}</label>
-          <div style={{display: 'flex', flexDirection: 'column', gap: theme.spacing.small}}>
+      <div className={s.fieldGroup}>
+          <label className={s.label}>{label}</label>
+          <div style={{display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)'}}>
               {players.map((player, index) => (
-                  <div key={index} style={{display: 'flex', gap: theme.spacing.small, alignItems: 'center'}}>
+                  <div key={index} style={{display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center'}}>
                       <div style={{flex: 1}}>
                         <PlayerInput 
                             value={player.name || ''}
@@ -419,10 +345,10 @@ const MatchForm: React.FC<MatchFormProps> = ({ onAddMatch, allPlayers, available
                         icon="👟"
                         color={theme.colors.accent2}
                       />
-                      <button type="button" onClick={() => removePlayer(setPlayers, index)} style={styles.removePlayerBtn}>×</button>
+                      <button type="button" onClick={() => removePlayer(setPlayers, index)} className={s.removePlayerBtn}>{'×'}</button>
                   </div>
               ))}
-              <button type="button" onClick={() => addPlayer(setPlayers)} style={styles.addPlayerButton}>+ Añadir Jugador</button>
+              <button type="button" onClick={() => addPlayer(setPlayers)} className={s.addPlayerButton}>+ Añadir Jugador</button>
           </div>
       </div>
   );
@@ -437,58 +363,18 @@ const MatchForm: React.FC<MatchFormProps> = ({ onAddMatch, allPlayers, available
     }
   };
 
-  const styles = useMemo(() => ({
-    form: { 
-        display: 'flex', 
-        flexDirection: 'column' as 'column', 
-        gap: theme.spacing.large,
-        position: 'relative' as 'relative',
-        transition: 'background-color 0.4s ease',
-        backgroundColor: flashColor ? `${flashColor}15` : 'transparent',
-        borderRadius: theme.borderRadius.medium,
-    },
-    gridContainer: { display: 'grid', gridTemplateColumns: '1fr 1fr', alignItems: 'flex-end', gap: theme.spacing.medium },
-    stepper: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.colors.background, border: `1px solid ${errors.goalDifference ? theme.colors.loss : theme.colors.borderStrong}`, borderRadius: theme.borderRadius.medium, padding: `0 ${theme.spacing.small}`, height: '42px' },
-    stepperButton: { background: 'none', border: 'none', color: theme.colors.primaryText, fontSize: '1.2rem', fontWeight: 'bold', cursor: 'pointer', padding: `0 ${theme.spacing.small}` },
-    stepperValue: { fontSize: '1.1rem', fontWeight: 600, color: theme.colors.primaryText, minWidth: '24px', textAlign: 'center' as 'center' },
-    fieldGroup: { display: 'flex', flexDirection: 'column' as 'column', gap: theme.spacing.extraSmall },
-    label: { fontSize: '0.8rem', color: theme.colors.secondaryText, fontWeight: 500, paddingLeft: '0.25rem' },
-    radioGroup: { display: 'flex', borderRadius: theme.borderRadius.medium, border: `1px solid ${errors.result ? theme.colors.loss : theme.colors.borderStrong}`, overflow: 'hidden', height: '42px' },
-    radioLabel: { flex: 1, textAlign: 'center' as 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: 'transparent', color: theme.colors.secondaryText, fontWeight: 600, transition: 'all 0.2s', fontSize: '0.9rem' },
-    submitButton: { flex: 1, padding: theme.spacing.medium, borderRadius: theme.borderRadius.medium, fontSize: theme.typography.fontSize.medium, fontWeight: 'bold', cursor: 'pointer', backgroundColor: theme.colors.accent1, color: theme.colors.textOnAccent, border: 'none', transition: 'transform 0.1s ease', marginTop: theme.spacing.small },
-    toggleInfoButton: { height: '42px', background: 'none', border: `1px dashed ${theme.colors.borderStrong}`, color: theme.colors.secondaryText, fontSize: theme.typography.fontSize.small, borderRadius: theme.borderRadius.medium, cursor: 'pointer', textAlign: 'center' as 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-    addPlayerButton: { background: 'none', border: `1px dashed ${theme.colors.border}`, color: theme.colors.accent2, padding: theme.spacing.small, borderRadius: theme.borderRadius.medium, cursor: 'pointer', fontSize: '0.8rem', width: '100%'},
-    textArea: { width: '100%', padding: theme.spacing.medium, backgroundColor: theme.colors.background, border: `1px solid ${theme.colors.borderStrong}`, borderRadius: theme.borderRadius.medium, color: theme.colors.primaryText, fontSize: theme.typography.fontSize.medium, boxSizing: 'border-box' as 'border-box' },
-    animatedSection: {
-        animation: 'slideDownFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-        transformOrigin: 'top',
-        display: 'flex',
-        flexDirection: 'column' as 'column',
-        gap: theme.spacing.large
-    },
-    removePlayerBtn: { background: 'none', border: 'none', color: theme.colors.loss, cursor: 'pointer', padding: '0 4px', fontSize: '1.2rem', height: '30px', width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-    validationMsg: { color: theme.colors.loss, fontSize: '0.75rem', marginTop: '2px', marginLeft: '4px' }
-  }), [theme, flashColor, errors]);
-
   return (
-    <form onSubmit={handleSubmit} style={styles.form}>
-      <style>{`
-        @keyframes slideDownFade {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-      
-      <div style={styles.fieldGroup}>
-        <label style={styles.label}>Fecha</label>
+    <form onSubmit={handleSubmit} className={s.form} style={{ backgroundColor: flashColor ? `${flashColor}15` : 'transparent' }}>
+      <div className={s.fieldGroup}>
+        <label className={s.label}>Fecha</label>
         <CustomDateInput value={date} onChange={setDate} />
       </div>
 
-      <div style={styles.fieldGroup}>
-        <label style={styles.label}>Resultado</label>
-        <div style={styles.radioGroup}>
+      <div className={s.fieldGroup}>
+        <label className={s.label}>Resultado</label>
+        <div className={`${s.radioGroup} ${errors.result ? s.radioGroupError : ''}`}>
           {(['VICTORIA', 'EMPATE', 'DERROTA'] as const).map((option) => (
-            <label key={option} style={{...styles.radioLabel, ...getResultRadioStyle(option)}}>
+            <label key={option} className={s.radioLabel} style={getResultRadioStyle(option)}>
               <input 
                 type="radio" 
                 name="result" 
@@ -501,57 +387,57 @@ const MatchForm: React.FC<MatchFormProps> = ({ onAddMatch, allPlayers, available
             </label>
           ))}
         </div>
-        {errors.result && <span style={styles.validationMsg}>{errors.result}</span>}
+        {errors.result && <span className={s.validationMsg}>{errors.result}</span>}
       </div>
 
       {result && (
-          <div style={styles.animatedSection}>
+          <div className={s.animatedSection}>
               
               {matches.length >= 20 && (
-                  <div style={styles.fieldGroup}>
-                      <label style={styles.label}>Registrar usando IA</label>
+                  <div className={s.fieldGroup}>
+                      <label className={s.label}>Registrar usando IA</label>
                       <QuickEntryMenu onDataParsed={handleQuickEntryData} />
                   </div>
               )}
 
-              <div style={styles.gridContainer}>
-                <div style={styles.fieldGroup}>
-                    <label style={styles.label}>Goles</label>
-                    <div style={styles.stepper}>
-                        <button type="button" onClick={() => setMyGoals(g => Math.max(0, g - 1))} style={styles.stepperButton}>-</button>
-                        <span style={styles.stepperValue}>{myGoals}</span>
-                        <button type="button" onClick={() => setMyGoals(g => g + 1)} style={styles.stepperButton}>+</button>
+              <div className={s.gridContainer}>
+                <div className={s.fieldGroup}>
+                    <label className={s.label}>Goles</label>
+                    <div className={s.stepper}>
+                        <button type="button" onClick={() => setMyGoals(g => Math.max(0, g - 1))} className={s.stepperButton}>-</button>
+                        <span className={s.stepperValue}>{myGoals}</span>
+                        <button type="button" onClick={() => setMyGoals(g => g + 1)} className={s.stepperButton}>+</button>
                     </div>
                 </div>
-                <div style={styles.fieldGroup}>
-                    <label style={styles.label}>Asistencias</label>
-                    <div style={styles.stepper}>
-                        <button type="button" onClick={() => setMyAssists(a => Math.max(0, a - 1))} style={styles.stepperButton}>-</button>
-                        <span style={styles.stepperValue}>{myAssists}</span>
-                        <button type="button" onClick={() => setMyAssists(a => a + 1)} style={styles.stepperButton}>+</button>
+                <div className={s.fieldGroup}>
+                    <label className={s.label}>Asistencias</label>
+                    <div className={s.stepper}>
+                        <button type="button" onClick={() => setMyAssists(a => Math.max(0, a - 1))} className={s.stepperButton}>-</button>
+                        <span className={s.stepperValue}>{myAssists}</span>
+                        <button type="button" onClick={() => setMyAssists(a => a + 1)} className={s.stepperButton}>+</button>
                     </div>
                 </div>
               </div>
               
-              <div style={styles.gridContainer}>
-                <div style={styles.fieldGroup}>
-                  <label style={styles.label}>Diferencia resultado</label>
-                  <div style={styles.stepper}>
-                    <button type="button" onClick={() => handleGoalDifferenceChange(-1)} style={styles.stepperButton} disabled={result === 'EMPATE'}>-</button>
-                    <span style={styles.stepperValue}>{result === 'EMPATE' ? 0 : goalDifference}</span>
-                    <button type="button" onClick={() => handleGoalDifferenceChange(1)} style={styles.stepperButton} disabled={result === 'EMPATE'}>+</button>
+              <div className={s.gridContainer}>
+                <div className={s.fieldGroup}>
+                  <label className={s.label}>Diferencia resultado</label>
+                  <div className={`${s.stepper} ${errors.goalDifference ? s.stepperError : ''}`}>
+                    <button type="button" onClick={() => handleGoalDifferenceChange(-1)} className={s.stepperButton} disabled={result === 'EMPATE'}>-</button>
+                    <span className={s.stepperValue}>{result === 'EMPATE' ? 0 : goalDifference}</span>
+                    <button type="button" onClick={() => handleGoalDifferenceChange(1)} className={s.stepperButton} disabled={result === 'EMPATE'}>+</button>
                   </div>
-                  {errors.goalDifference && <span style={styles.validationMsg}>{errors.goalDifference}</span>}
+                  {errors.goalDifference && <span className={s.validationMsg}>{errors.goalDifference}</span>}
                 </div>
-                <button type="button" onClick={() => setShowAdditionalInfo(!showAdditionalInfo)} style={styles.toggleInfoButton}>
+                <button type="button" onClick={() => setShowAdditionalInfo(!showAdditionalInfo)} className={s.toggleInfoButton}>
                   {showAdditionalInfo ? '- INFO EXTRA' : '+ INFO EXTRA'}
                 </button>
               </div>
               
               {showAdditionalInfo && (
-                  <div style={{display: 'flex', flexDirection: 'column', gap: theme.spacing.large, animation: 'slideDownFade 0.3s ease'}}>
-                      <div style={styles.fieldGroup}>
-                          <label style={styles.label}>Torneo</label>
+                  <div className={s.animatedSection}>
+                      <div className={s.fieldGroup}>
+                          <label className={s.label}>Torneo</label>
                           <AutocompleteInput 
                               value={tournament} 
                               onChange={setTournament} 
@@ -563,14 +449,14 @@ const MatchForm: React.FC<MatchFormProps> = ({ onAddMatch, allPlayers, available
                       {renderPlayerInputs(myTeamPlayers, setMyTeamPlayers, "Mi Equipo")}
                       {renderPlayerInputs(opponentPlayers, setOpponentPlayers, "Rivales")}
 
-                      <div style={styles.fieldGroup}>
-                          <label style={styles.label}>Notas</label>
-                          <textarea value={notes} onChange={e => setNotes(e.target.value)} style={{...styles.textArea, minHeight: '80px', fontFamily: 'inherit'}} placeholder="Detalles del partido..." />
+                      <div className={s.fieldGroup}>
+                          <label className={s.label}>Notas</label>
+                          <textarea value={notes} onChange={e => setNotes(e.target.value)} className={s.textArea} style={{ minHeight: '80px' }} placeholder="Detalles del partido..." />
                       </div>
                   </div>
               )}
 
-              <button type="submit" style={styles.submitButton}>Confirmar Partido</button>
+              <button type="submit" className={s.submitButton}>Confirmar Partido</button>
           </div>
       )}
     </form>

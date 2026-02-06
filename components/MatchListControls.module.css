@@ -1,0 +1,75 @@
+/* MatchListControls.module.css */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+  max-width: 100%;
+  box-sizing: border-box;
+  transition: background-color var(--transition-normal), border-color var(--transition-normal);
+}
+
+.resultFilterGroup {
+  width: 100%;
+}
+
+.dropdownsContainer {
+  display: flex;
+  gap: var(--spacing-md);
+  width: 100%;
+  flex-wrap: nowrap;
+}
+
+.filterGroup {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) 2rem var(--spacing-sm) var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: border-color var(--transition-fast);
+}
+
+.select:focus {
+  border-color: var(--color-accent-2);
+  outline: none;
+}
+
+.yearFilterWrapper {
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: -4px;
+  max-width: 100%;
+  overflow: hidden;
+}

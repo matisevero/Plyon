@@ -178,15 +178,6 @@ const MainAppContent: React.FC = () => {
 
   return (
     <div style={styles.appContainer}>
-      <style>{`
-        @keyframes slidePageIn {
-          from { opacity: 0; transform: translateX(20px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        .page-transition-enter {
-          animation: slidePageIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-      `}</style>
       <SyncBanner />
       <VersionChecker /> 
       <DataConflictModal />

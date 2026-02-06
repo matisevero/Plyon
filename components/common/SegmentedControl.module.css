@@ -1,0 +1,37 @@
+/* SegmentedControl.module.css */
+
+.container {
+  display: flex;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-strong);
+  overflow: hidden;
+  width: 100%;
+  background-color: var(--color-bg);
+}
+
+.button {
+  flex: 1;
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.8rem;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+  border: none;
+  border-right: 1px solid var(--color-border-strong);
+  background-color: transparent;
+  color: var(--color-text-secondary);
+}
+
+.button:last-child {
+  border-right: none;
+}
+
+.button:hover:not(.buttonActive) {
+  background-color: var(--nav-hover-bg);
+  color: var(--color-text-primary);
+}
+
+.buttonActive {
+  background-color: var(--nav-active-bg);
+  color: var(--nav-active-text);
+}
