@@ -7,6 +7,8 @@ import { UsersIcon } from '../components/icons/UsersIcon';
 import { SparklesIcon } from '../components/icons/SparklesIcon';
 import { TrophyIcon } from '../components/icons/TrophyIcon';
 import LoginModal from '../components/modals/LoginModal';
+import InvitationLandingModal from '../components/modals/InvitationLandingModal';
+import { validateInvitation } from '../services/firebaseService';
 
 const LandingPage: React.FC = () => {
   const { setCurrentPage } = useData();
@@ -14,11 +16,46 @@ const LandingPage: React.FC = () => {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [activeFeature, setActiveFeature] = useState(0);
 
+  // Invitation State
+  const [inviterName, setInviterName] = useState<string | null>(null);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Check for Invitation Code on Mount
+  useEffect(() => {
+    const checkInvite = async () => {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const urlCode = params.get('invite');
+            
+            if (urlCode) {
+                // Validate code with backend
+                const inviterProfile = await validateInvitation(urlCode);
+                if (inviterProfile) {
+                    console.log("Invitación válida de:", inviterProfile.name);
+                    setInviterName(inviterProfile.name);
+                    setIsInviteModalOpen(true);
+                } else {
+                    console.log("Código de invitación inválido o expirado");
+                }
+            }
+        } catch (e) { 
+            console.error("Error validando invitación:", e); 
+        }
+    };
+    checkInvite();
+  }, []);
+
+  const handleInviteAccept = () => {
+      setIsInviteModalOpen(false);
+      // Open Login Modal immediately so they can register and claim the invite
+      setIsLoginOpen(true);
+  };
 
   // Auto-rotate features
   useEffect(() => {
@@ -230,6 +267,13 @@ const LandingPage: React.FC = () => {
         </footer>
 
         <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
+        
+        <InvitationLandingModal
+            isOpen={isInviteModalOpen}
+            onClose={() => setIsInviteModalOpen(false)}
+            inviterName={inviterName || 'Un amigo'}
+            onAccept={handleInviteAccept}
+        />
     </div>
   );
 };

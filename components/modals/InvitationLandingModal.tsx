@@ -52,6 +52,10 @@ const InvitationLandingModal: React.FC<InvitationLandingModalProps> = ({ isOpen,
     },
     decoration: {
         position: 'absolute', top: 10, left: 10, opacity: 0.1
+    },
+    closeButton: {
+      position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', 
+      color: theme.colors.secondaryText, cursor: 'pointer', fontSize: '1.5rem'
     }
   };
 
@@ -62,6 +66,7 @@ const InvitationLandingModal: React.FC<InvitationLandingModalProps> = ({ isOpen,
             @keyframes scaleUp { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         `}</style>
       <div style={styles.modal}>
+        <button onClick={onClose} style={styles.closeButton}>×</button>
         <div style={styles.decoration}><FootballIcon size={40} /></div>
         <div style={styles.iconContainer}><UsersIcon size={40} /></div>
         <h2 style={styles.title}>¡Has sido desafiado!</h2>
