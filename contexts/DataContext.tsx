@@ -506,18 +506,12 @@ export const DataProvider: React.FC<{ children: ReactNode; initialData?: any; re
       const result = matchData.result;
       const basePts = result === 'VICTORIA' ? 3 : result === 'EMPATE' ? 1 : 0;
       const earnedPoints = basePts * multiplier;
-      const tournamentName = isQualified ? 'Copa Mundial (Élite)' : 'Copa Mundial';
-      
-      if (!availableTournaments.includes(tournamentName)) {
-          addTournament(tournamentName);
-      }
-
       const match = await addMatch({ 
           ...matchData, 
           matchMode: 'world-cup',
           earnedPoints,
-          tournament: tournamentName
       });
+
       if (!playerProfile.worldCupProgress) return match;
       const progress = { ...playerProfile.worldCupProgress };
       if (progress.currentStage === 'group') {
@@ -585,16 +579,12 @@ export const DataProvider: React.FC<{ children: ReactNode; initialData?: any; re
           earnedPoints = basePts * 2; 
       }
 
-      if (!availableTournaments.includes(tournamentName)) {
-          addTournament(tournamentName);
-      }
-
       const match = await addMatch({ 
           ...matchData, 
           matchMode: 'qualifiers',
           earnedPoints: earnedPoints,
-          tournament: tournamentName
       });
+      
       if (playerProfile.qualifiersProgress) {
           const progress = { ...playerProfile.qualifiersProgress };
           const conf = CONFEDERATIONS[progress.confederation];
