@@ -110,16 +110,18 @@ export const overwriteCloudData = async (userId: string, data: any) => {
 
 export const updateProfile = async (userId: string, data: Partial<PlayerProfileData>) => {
     if (!db) return;
-    // Flatten data to update top-level user doc fields if they match
     const updateData: any = { ...data };
-    // Also update specific playerProfile object if using nested structure
     updateData.playerProfile = data; 
     
-    // Search fields maintenance
     if (data.name) updateData.searchName = data.name.toLowerCase();
     if (data.username) updateData.searchUsername = data.username.toLowerCase();
 
-    await setDoc(doc(db, 'users', userId), updateData, { merge: true });
+    // Eliminar cualquier campo undefined antes de guardar en Firestore
+    const sanitized = Object.fromEntries(
+        Object.entries(updateData).filter(([_, v]) => v !== undefined)
+    );
+
+    await setDoc(doc(db, 'users', userId), sanitized, { merge: true });
 };
 
 export const getOneTimeUserData = async (userId: string) => {
