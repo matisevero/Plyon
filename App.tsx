@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
+import { Analytics } from '@vercel/analytics/react';
 import { useTheme } from './contexts/ThemeContext';
 import { useData } from './contexts/DataContext';
 import { useAuth } from './contexts/AuthContext';
@@ -201,6 +202,7 @@ const MainAppContent: React.FC = () => {
       <PendingMatchesModal isOpen={isPendingMatchesModalOpen} onClose={() => setIsPendingMatchesModalOpen(false)} />
       
       {/* BottomTabBar Hidden */}
+      <Analytics />
     </div>
   );
 };
