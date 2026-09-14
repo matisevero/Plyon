@@ -30,6 +30,32 @@ import type {
 } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
+// Firestore rejects any field whose value is `undefined` (even nested inside
+// an object), so every payload we build from partial/optional data must be
+// scrubbed recursively before it reaches setDoc/addDoc/updateDoc.
+// Only plain object literals are walked into — Firestore sentinel values
+// like serverTimestamp(), arrayUnion(), increment() and Timestamp instances
+// have their own prototypes and are passed through untouched so their
+// special behavior isn't lost by reconstructing them as plain objects.
+const isPlainObject = (value: any) =>
+    value !== null &&
+    typeof value === 'object' &&
+    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
+
+const removeUndefinedDeep = (value: any): any => {
+    if (Array.isArray(value)) {
+        return value.map(removeUndefinedDeep);
+    }
+    if (isPlainObject(value)) {
+        return Object.fromEntries(
+            Object.entries(value)
+                .filter(([, v]) => v !== undefined)
+                .map(([k, v]) => [k, removeUndefinedDeep(v)])
+        );
+    }
+    return value;
+};
+
 export const matchesService = {
     add: async (userId: string, match: Match) => {
         if (!db) return;
@@ -116,10 +142,9 @@ export const updateProfile = async (userId: string, data: Partial<PlayerProfileD
     if (data.name) updateData.searchName = data.name.toLowerCase();
     if (data.username) updateData.searchUsername = data.username.toLowerCase();
 
-    // Eliminar cualquier campo undefined antes de guardar en Firestore
-    const sanitized = Object.fromEntries(
-        Object.entries(updateData).filter(([_, v]) => v !== undefined)
-    );
+    // Eliminar cualquier campo undefined antes de guardar en Firestore,
+    // incluyendo los anidados dentro de updateData.playerProfile.
+    const sanitized = removeUndefinedDeep(updateData);
 
     await setDoc(doc(db, 'users', userId), sanitized, { merge: true });
 };
@@ -268,12 +293,14 @@ export const respondToFriendRequest = async (requestId: string, action: 'accept'
 export const createSharedView = async (snapshot: any, page: string, filters?: any) => {
     if (!db) return null;
     // FIX: Changed collection name to 'sharedViews'
-    const docRef = await addDoc(collection(db, 'sharedViews'), {
+    // `filters` is optional; Firestore rejects `undefined` fields, so it's
+    // stripped out entirely (rather than saved as undefined) when not passed.
+    const docRef = await addDoc(collection(db, 'sharedViews'), removeUndefinedDeep({
         snapshot,
         page,
         filters,
         createdAt: serverTimestamp()
-    });
+    }));
     return docRef.id;
 };
 

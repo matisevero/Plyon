@@ -203,7 +203,7 @@ const WorldCupPage: React.FC = () => {
             <TutorialModal isOpen={isTutorialOpen} onClose={(dontShowAgain) => { setIsTutorialOpen(false); if(dontShowAgain) markTutorialAsSeen(); }} steps={tutorialSteps} />
             <main style={styles.container}>
                 <QualifiersView 
-                    onBackToSelection={() => updatePlayerProfile({ activeWorldCupMode: undefined })} 
+                    onBackToSelection={() => updatePlayerProfile({ activeWorldCupMode: null as any })}
                     onShowTutorial={() => setIsTutorialOpen(true)} 
                     onOpenHistory={() => {}} 
                 />
@@ -237,7 +237,7 @@ const WorldCupPage: React.FC = () => {
             <main style={styles.container}>
                 <div style={styles.header}>
                     <div style={{display: 'flex', alignItems: 'center', gap: theme.spacing.medium}}>
-                        <button onClick={() => updatePlayerProfile({ activeWorldCupMode: undefined })} style={{...styles.iconButton, fontSize: '0.9rem', fontWeight: 600}}>
+                        <button onClick={() => updatePlayerProfile({ activeWorldCupMode: null as any })} style={{...styles.iconButton, fontSize: '0.9rem', fontWeight: 600}}>
                             ← Volver
                         </button>
                         <h2 style={{...styles.pageTitle, borderLeft: 'none', paddingLeft: 0}}>

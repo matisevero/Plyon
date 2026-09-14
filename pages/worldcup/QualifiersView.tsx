@@ -36,7 +36,7 @@ const QualificationResultView: React.FC<{ onBackToSelection: () => void }> = ({ 
     };
     
     const handleResetQualifiers = async () => {
-        await updatePlayerProfile({ qualifiersProgress: null, activeWorldCupMode: undefined });
+        await updatePlayerProfile({ qualifiersProgress: null, activeWorldCupMode: null as any });
         onBackToSelection();
     };
 
