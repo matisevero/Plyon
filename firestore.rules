@@ -28,9 +28,15 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && 
                       (resource.data.createdBy == request.auth.uid || isAdmin());
     }
-    
+
     match /admin/{document=**} {
       allow read, write: if isAdmin();
+    }
+
+    match /sharedViews/{shareId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
     }
   }
 }
